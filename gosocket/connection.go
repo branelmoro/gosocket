@@ -39,8 +39,35 @@ func (c *Conn) Close() {
 
 func upgrateToWebSocket(conn *net.Conn) {
 
+	poller, err := netpoll.New(nil)
+	if err != nil {
+		// handle error
+	} else {
 
+		// Get netpoll descriptor with EventRead|EventEdgeTriggered.
+		desc := netpoll.Must(netpoll.Handle(conn, netpoll.EventRead | netpoll.EventEdgeTriggered))
 
+		connection := Conn{conn: conn, desc: desc, poller: poller}
+
+		poller.Start(desc, func(ev netpoll.Event) {
+
+			fmt.Println("start-------------------")
+			fmt.Println(ev)
+
+			connection.Read()
+			// if ev&netpoll.EventReadHup != 0 {
+			//   // poller.Stop(desc)
+			//   conn.Close()
+			//   return
+			// }
+
+			// hr, err := ioutil.ReadAll(conn)
+			// fmt.Println(hr)
+			// if err != nil {
+			//   // handle error
+			//
+		}
+	}
 }
 
 
@@ -55,17 +82,16 @@ func handleConnection(conn *net.Conn) {
 		// Get netpoll descriptor with EventRead|EventEdgeTriggered.
 		desc := netpoll.Must(netpoll.Handle(conn, netpoll.EventRead | netpoll.EventEdgeTriggered))
 
-		connection := Conn{conn: conn, desc: desc, poller: poller}
-
 		poller.Start(desc, func(ev netpoll.Event) {
-
-
 
 			fmt.Println("start-------------------")
 			fmt.Println(ev)
 
 
 			connection.Read()
+
+
+			go upgrateToWebSocket()
 			// if ev&netpoll.EventReadHup != 0 {
 			//   // poller.Stop(desc)
 			//   conn.Close()
