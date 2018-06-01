@@ -15,16 +15,8 @@ type Conn struct {
 
 func (c *Conn) Read() []byte {
 	b := make([]byte, 1000)
-	for {
-		x, err := c.conn.Read(b)
-		fmt.Println("start reading:", x, err, string(b), b)
-		if err != nil {
-		  break
-		}
-		if string(b) == "" {
-		  break
-		}
-	}
+	x, err := c.conn.Read(b)
+	fmt.Println("message reading:", x, err, string(b),)
 	return b
 }
 
@@ -56,7 +48,7 @@ func handleConnection(conn net.Conn) {
 			fmt.Println(ev)
 			b := make([]byte, 1000)
 			x, err := conn.Read(b)
-			fmt.Println("start reading:", x, err, string(b))
+			fmt.Println("fisrt start reading:", x, err, string(b))
 			poller.Stop(desc)
 
 			OnWebsocketOpen(conn)
