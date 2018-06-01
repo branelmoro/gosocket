@@ -4,8 +4,14 @@ import (
     "fmt"
     "net"
     "os"
-    "github.com/mailru/easygo/netpoll"
-    "runtime"
+    // "github.com/mailru/easygo/netpoll"
+    // "runtime"
+)
+
+const (
+    CONN_HOST = "localhost"
+    CONN_PORT = "3333"
+    CONN_TYPE = "tcp"
 )
 
 func StartServer() {
@@ -28,7 +34,7 @@ func StartServer() {
         // Handle connections in a new goroutine.
         // go handleRequest(conn)
         // go handleConn(conn)
-        handleConnection(conn)
+        handleConnection(&conn)
     }
 }
 

@@ -10,30 +10,39 @@ package gosocket
 
 type socketOpenCb func(Conn)
 
-type messageCb func(Conn, byte)
+type messageCb func(Conn, []byte)
 
 type errorCb func(Conn)
 
 type closeCb func(Conn)
 
 
-var onWebsocketOpen socketOpenCb
-var onMessage messageCb
-var onError errorCb
-var onClose closeCb
+// var onWebsocketOpen socketOpenCb
+// var onMessage messageCb
+// var onError errorCb
+// var onClose closeCb
 
-func OnWebsocketOpen(cb socketOpenCb) {
-	onWebsocketOpen = cb
-}
 
-func OnMessage(cb messageCb) {
-    onMessage = cb
-}
+// func OnWebsocketOpen(cb socketOpenCb) {
+// 	onWebsocketOpen = cb
+// }
 
-func OnError(cb errorCb) {
-    onError = cb
-}
+// func OnMessage(cb messageCb) {
+//     onMessage = cb
+// }
 
-func OnClose(cb closeCb) {
-    onClose = cb
-}
+// func OnError(cb errorCb) {
+//     onError = cb
+// }
+
+// func OnClose(cb closeCb) {
+//     onClose = cb
+// }
+
+
+
+
+var OnWebsocketOpen socketOpenCb
+var OnMessage messageCb
+var OnError errorCb
+var OnClose closeCb

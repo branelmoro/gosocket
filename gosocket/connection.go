@@ -1,6 +1,7 @@
 package gosocket
 
 import (
+	"fmt"
     "net"
     "github.com/mailru/easygo/netpoll"
 )
@@ -12,10 +13,10 @@ type Conn struct {
 	poller   netpoll.Poller
 }
 
-func (c *Conn) Read() string {
+func (c *Conn) Read() []byte {
 	b := make([]byte, 1000)
 	for {
-		x, err := c.Conn.Read(b)
+		x, err := c.conn.Read(b)
 		fmt.Println("start reading:", x, err, string(b), b)
 		if err != nil {
 		  break
@@ -24,6 +25,7 @@ func (c *Conn) Read() string {
 		  break
 		}
 	}
+	return b
 }
 
 func (c *Conn) Write() {
@@ -31,11 +33,34 @@ func (c *Conn) Write() {
 }
 
 func (c *Conn) Close() {
-	conn.poller.close()
-	conn.desc.close()
-	conn.Conn.close()
+	c.poller.Stop(c.desc)
+	c.desc.Close()
+	c.conn.Close()
 }
 
+
+// Handles incoming requests.
+func handleConnection(conn *net.Conn) {
+    
+	poller, err := netpoll.New(nil)
+	if err != nil {
+		// handle error
+	} else {
+
+		// Get netpoll descriptor with EventRead|EventEdgeTriggered.
+		desc := netpoll.Must(netpoll.Handle(conn, netpoll.EventRead | netpoll.EventEdgeTriggered))
+
+		poller.Start(desc, func(ev netpoll.Event) {
+			fmt.Println("start-------------------")
+			fmt.Println(ev)
+			b := make([]byte, 1000)
+			x, err := conn.conn.Read(b)
+			fmt.Println("start reading:", x, err, string(b), b)
+			poller.Stop(desc)
+			go upgrateToWebSocket(conn)
+		})
+	}
+}
 
 func upgrateToWebSocket(conn *net.Conn) {
 
@@ -66,43 +91,6 @@ func upgrateToWebSocket(conn *net.Conn) {
 			// if err != nil {
 			//   // handle error
 			//
-		}
-	}
-}
-
-
-// Handles incoming requests.
-func handleConnection(conn *net.Conn) {
-    
-	poller, err := netpoll.New(nil)
-	if err != nil {
-		// handle error
-	} else {
-
-		// Get netpoll descriptor with EventRead|EventEdgeTriggered.
-		desc := netpoll.Must(netpoll.Handle(conn, netpoll.EventRead | netpoll.EventEdgeTriggered))
-
-		poller.Start(desc, func(ev netpoll.Event) {
-
-			fmt.Println("start-------------------")
-			fmt.Println(ev)
-
-
-			connection.Read()
-
-
-			go upgrateToWebSocket()
-			// if ev&netpoll.EventReadHup != 0 {
-			//   // poller.Stop(desc)
-			//   conn.Close()
-			//   return
-			// }
-
-			// hr, err := ioutil.ReadAll(conn)
-			// fmt.Println(hr)
-			// if err != nil {
-			//   // handle error
-			//
-		}
+		})
 	}
 }
