@@ -1,18 +1,18 @@
 package gosocket
 
-// import (
-//     "fmt"
-//     "net"
-//     "os"
-//     "github.com/mailru/easygo/netpoll"
-//     "runtime"
-// )
+import (
+    // "fmt"
+    "net"
+    // "os"
+    // "github.com/mailru/easygo/netpoll"
+    // "runtime"
+)
 
-type socketOpenCb func(Conn)
+type socketOpenCb func(net.Conn)
 
 type messageCb func(Conn, []byte)
 
-type errorCb func(Conn)
+type errorCb func(net.Conn)
 
 type closeCb func(Conn)
 
@@ -40,9 +40,16 @@ type closeCb func(Conn)
 // }
 
 
+var(
+    OnWebsocketOpen socketOpenCb
+    OnMessage messageCb
+    OnError errorCb
+    OnClose closeCb
+)
 
 
-var OnWebsocketOpen socketOpenCb
-var OnMessage messageCb
-var OnError errorCb
-var OnClose closeCb
+
+// var OnWebsocketOpen socketOpenCb
+// var OnMessage messageCb
+// var OnError errorCb
+// var OnClose closeCb

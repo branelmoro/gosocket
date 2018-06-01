@@ -34,7 +34,7 @@ func StartServer() {
         // Handle connections in a new goroutine.
         // go handleRequest(conn)
         // go handleConn(conn)
-        handleConnection(&conn)
+        handleConnection(conn)
     }
 }
 
