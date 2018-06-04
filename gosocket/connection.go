@@ -147,28 +147,7 @@ X-Pad: avoid browser bug
 	// upgrade to websocket connection
 	upgrateToWebSocket(&connection)
 
-
 }
-
-
-func parseRequest(a *[]byte) {
-
-	req_lines := strings.Split(string(*a), "\n\r")
-
-	fmt.Println(req_lines)
-
-	// req := strings.Split(req_lines[0], " ")
-
-	fmt.Println(req_lines[:len(req_lines)-1])
-
-	// for index, element := range req_lines[1:len(req_lines)-1] {
-
-	// }
-
-
-
-}
-
 
 
 func upgrateToWebSocket(c *Conn) {
