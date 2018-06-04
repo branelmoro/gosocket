@@ -4,6 +4,7 @@ import (
     "fmt"
     "net"
     "os"
+    // "time"
     // "github.com/mailru/easygo/netpoll"
     // "runtime"
 )
@@ -15,6 +16,8 @@ const (
 )
 
 func StartServer() {
+    // fmt.Println(time.Second)
+    // return
     // Listen for incoming connections.
     l, err := net.Listen(CONN_TYPE, CONN_HOST+":"+CONN_PORT)
     if err != nil {
@@ -34,7 +37,7 @@ func StartServer() {
         // Handle connections in a new goroutine.
         // go handleRequest(conn)
         // go handleConn(conn)
-        handleConnection(conn)
+        go handleConnection(conn)
     }
 }
 

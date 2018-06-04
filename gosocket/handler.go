@@ -2,17 +2,17 @@ package gosocket
 
 import (
     // "fmt"
-    "net"
+    // "net"
     // "os"
     // "github.com/mailru/easygo/netpoll"
     // "runtime"
 )
 
-type socketOpenCb func(net.Conn)
+type socketOpenCb func(Conn)
 
 type messageCb func(Conn, []byte)
 
-type errorCb func(net.Conn)
+type errorCb func(Conn)
 
 type closeCb func(Conn)
 

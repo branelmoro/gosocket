@@ -2,22 +2,51 @@ package gosocket
 
 import (
 	"fmt"
-    "net"
-    "github.com/mailru/easygo/netpoll"
+	"net"
+	"io"
+	"time"
+	// "bufio"
+	"github.com/mailru/easygo/netpoll"
 )
 
 // Conn represents single connection instance.
 type Conn struct {
-	conn     net.Conn
+	conn	 net.Conn
 	desc 	 *netpoll.Desc
 	poller   *netpoll.Poller
 }
 
 func (c *Conn) Read() []byte {
-	b := make([]byte, 1000)
-	x, err := c.conn.Read(b)
-	fmt.Println("message reading:", x, err, string(b),)
-	return b
+
+	var read_bytes []byte
+
+	buff_size := 1
+
+	timeoutDuration := 1 * time.Millisecond
+	fmt.Println("Time-----", timeoutDuration)
+	c.conn.SetReadDeadline(time.Now().Add(timeoutDuration))
+
+	buff := make([]byte, buff_size)
+	for {
+		num_bytes, err := c.conn.Read(buff)
+		// fmt.Println("Bytes received:", num_bytes, err, string(buff), time.Now())
+
+		if err != nil {
+			if err != io.EOF {
+				fmt.Println("read error:", err)
+			}
+			break
+		}
+
+		read_bytes = append(read_bytes, buff...)
+
+		if num_bytes < buff_size {
+			break
+		} else {
+			c.conn.SetReadDeadline(time.Now().Add(timeoutDuration))
+		}
+	}
+	return read_bytes
 }
 
 func (c *Conn) Write(data []byte) {
@@ -34,61 +63,91 @@ func (c *Conn) Close() {
 
 // Handles incoming requests.
 func handleConnection(conn net.Conn) {
-    
-	poller, err := netpoll.New(nil)
-	if err != nil {
-		// handle error
+
+	timeoutDuration := 10 * time.Second
+	conn.SetReadDeadline(time.Now().Add(timeoutDuration))
+
+	buff := make([]byte, 6144)
+	// Read the incoming connection into the buffer.
+	num_bytes, err := conn.Read(buff)
+
+	fmt.Println("fisrt tcp reading:", num_bytes, err, string(buff))
+
+	if num_bytes == 0 {
+
+		// Send a response back to person contacting us.
+		conn.Write([]byte(`HTTP/1.1 200 OK
+Server: Apache/2.2.14 (Win32)
+ETag: "10000000565a5-2c-3e94b66c2e680"
+Accept-Ranges: bytes
+Connection: close
+Content-Type: text/html
+X-Pad: avoid browser bug
+
+<html><body><h1>No Request data received!</h1></body></html>
+		`))
+		// Close the connection when you're done with it.
+		conn.Close()
 	} else {
 
-		// Get netpoll descriptor with EventRead|EventEdgeTriggered.
-		desc := netpoll.Must(netpoll.Handle(conn, netpoll.EventRead | netpoll.EventEdgeTriggered))
+		// validate content in  buff
 
-		poller.Start(desc, func(ev netpoll.Event) {
-			fmt.Println("start-------------------")
-			fmt.Println(ev)
-			b := make([]byte, 1000)
-			x, err := conn.Read(b)
-			fmt.Println("fisrt start reading:", x, err, string(b))
-			poller.Stop(desc)
 
-			OnWebsocketOpen(conn)
 
-			go upgrateToWebSocket(conn)
-		})
-	}
-}
 
-func upgrateToWebSocket(conn net.Conn) {
 
-	poller, err := netpoll.New(nil)
-	if err != nil {
-		// handle error
-
-		OnError(conn)
-	} else {
+		poller, err := netpoll.New(nil)
 
 		// Get netpoll descriptor with EventRead|EventEdgeTriggered.
 		desc := netpoll.Must(netpoll.Handle(conn, netpoll.EventRead | netpoll.EventEdgeTriggered))
 
 		connection := Conn{conn: conn, desc: desc, poller: &poller}
 
-		poller.Start(desc, func(ev netpoll.Event) {
+		OnWebsocketOpen(connection)
 
-			fmt.Println("new OnMessage call-------------------")
-			fmt.Println(ev)
 
-			OnMessage(connection, connection.Read())
-			// if ev&netpoll.EventReadHup != 0 {
-			//   // poller.Stop(desc)
-			//   conn.Close()
-			//   return
-			// }
+		if err != nil {
+			// handle error
 
-			// hr, err := ioutil.ReadAll(conn)
-			// fmt.Println(hr)
-			// if err != nil {
-			//   // handle error
-			//
-		})
+			OnError(connection)
+			return
+		}
+
+
+
+		// upgrade to websocket connection
+		upgrateToWebSocket(&connection)
+
 	}
+
+}
+
+
+
+
+func upgrateToWebSocket(c *Conn) {
+
+	conn := *c
+
+	poller := *conn.poller
+	desc := conn.desc
+
+	poller.Start(desc, func(ev netpoll.Event) {
+
+		fmt.Println(ev)
+
+		OnMessage(conn, conn.Read())
+		// if ev&netpoll.EventReadHup != 0 {
+		//   // poller.Stop(desc)
+		//   conn.Close()
+		//   return
+		// }
+
+		// hr, err := ioutil.ReadAll(conn)
+		// fmt.Println(hr)
+		// if err != nil {
+		//   // handle error
+		//
+	})
+
 }
