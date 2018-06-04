@@ -8,32 +8,29 @@ import (
 func main() {
 
 	// 1) on connection open
-	gosocket.OnWebsocketOpen = func(conn gosocket.Conn) {
-
-		fmt.Println("in OnWebsocketOpen------------")
-
+	gosocket.OnWebsocketOpen = func(conn *gosocket.Conn, a *[]byte) {
+		data := *a
+		fmt.Println(string(data))
+		// conn.Write([]byte("Request data received ------ "))
+		// conn.Write(data)
 	}
 
 
 	// 2) on message
-	gosocket.OnMessage = func(conn gosocket.Conn, a []byte) {
-
-		fmt.Println("in OnMessage------------", string(a))
-
-		conn.Write([]byte("You sent ------ "))
-		conn.Write(a)
-
-
+	gosocket.OnMessage = func(conn *gosocket.Conn, a *[]byte) {
+		data := *a
+		conn.Write([]byte("Message received ------ "))
+		conn.Write(data)
 	}
 
 	// 3) on error
-	gosocket.OnError = func(conn gosocket.Conn) {
+	gosocket.OnError = func(conn *gosocket.Conn) {
 
 		fmt.Println("in OnMessage------------")
 	}
 
 	// 4) on connection close
-	gosocket.OnClose = func(conn gosocket.Conn) {
+	gosocket.OnClose = func(conn *gosocket.Conn) {
 
 		fmt.Println("in OnClose------------")
 

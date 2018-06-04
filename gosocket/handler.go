@@ -8,13 +8,13 @@ import (
     // "runtime"
 )
 
-type socketOpenCb func(Conn)
+type socketOpenCb func(*Conn, *[]byte)
 
-type messageCb func(Conn, []byte)
+type messageCb func(*Conn, *[]byte)
 
-type errorCb func(Conn)
+type errorCb func(*Conn)
 
-type closeCb func(Conn)
+type closeCb func(*Conn)
 
 
 // var onWebsocketOpen socketOpenCb
