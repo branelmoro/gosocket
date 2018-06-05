@@ -1,5 +1,10 @@
 package gosocket
 
+import (
+	"strings"
+)
+
+
 func getRequest(rb *[]byte) ([]string, int, string) {
 	var (
 		req []string

@@ -7,7 +7,6 @@ import (
 	"time"
 	// "bufio"
 	"github.com/mailru/easygo/netpoll"
-	"strings"
 )
 
 // Conn represents single connection instance.
@@ -61,16 +60,20 @@ func (c *Conn) Close() {
 	c.conn.Close()
 }
 
-func readRequestTillBlankNewline(c *net.Conn, nl_count int, byte_size int) ([]byte, int, string){
+func readRequestTillBlankNewline(c *net.Conn, nl_count int, byte_size int) ([]byte, int){
 
 	conn := *c
 
-	var read_bytes []byte
+	var (
+		read_bytes []byte
+		prev_byte byte
+		// err string
+	)
 
 	buff := make([]byte, 1)
 	// Read the incoming connection into the buffer.
 
-	prev_byte := 0
+	prev_byte = 0
 
 	cnt_nl := 0
 
@@ -108,7 +111,7 @@ func readRequestTillBlankNewline(c *net.Conn, nl_count int, byte_size int) ([]by
 		}
 	}
 
-	return read_bytes, byte_size, err
+	return read_bytes, byte_size
 
 }
 
@@ -116,14 +119,18 @@ func readRequestTillBlankNewline(c *net.Conn, nl_count int, byte_size int) ([]by
 // Handles incoming requests.
 func handleConnection(conn net.Conn) {
 
-	var read_bytes []byte
+	var (
+		read_bytes []byte
+		headers map[string]string
+		sec_web_accept string
+	)
 
 	request_type := "tcp"
 
 	timeoutDuration := 10 * time.Second
 	conn.SetReadDeadline(time.Now().Add(timeoutDuration))
 
-	req_bytes, byte_size, err := readRequestTillNewlines(&conn, 2, 0)
+	req_bytes, byte_size := readRequestTillBlankNewline(&conn, 2, 0)
 
 	read_bytes = append(read_bytes, req_bytes...)
 
@@ -139,29 +146,8 @@ func handleConnection(conn net.Conn) {
 		return
 	}
 
-
-// 	if len(read_bytes) == 0 {
-
-// 		// Send a response back to person contacting us.
-// 		conn.Write([]byte(`HTTP/1.1 200 OK
-// Server: Apache/2.2.14 (Win32)
-// ETag: "10000000565a5-2c-3e94b66c2e680"
-// Accept-Ranges: bytes
-// Connection: close
-// Content-Type: text/html
-// X-Pad: avoid browser bug
-
-// <html><body><h1>No Request data received!</h1></body></html>
-// 		`))
-// 		// Close the connection when you're done with it.
-// 		conn.Close()
-// 		return
-// 	}
-	
-	// validate content in read_bytes
-
-	poller, err := netpoll.New(nil)
-	if err != nil {
+	poller, err1 := netpoll.New(nil)
+	if err1 != nil {
 		conn.Write([]byte("Unable to initialize netpoll... Closing Connection..."))
 		conn.Close()
 		return
@@ -172,18 +158,25 @@ func handleConnection(conn net.Conn) {
 
 	connection := Conn{conn: conn, desc: desc, poller: &poller}
 
+	
+	// validate content in read_bytes
+    req, req_len, err2 := getRequest(&read_bytes)
 
-    req, req_len, err := getRequest(&read_bytes)
+    fmt.Println(req, req_len, err2)
 
-	if err == "" {
-		headers, err :=getHeaders(&a,(req_len+1))
-		if err == "" {
+	if err2 == "" {
+		headers, err3 := getHeaders(&read_bytes,(req_len+1))
+		fmt.Println(headers)
+		if err3 == "" {
 			request_type = "http"
 			if v1, v2 := headers["Upgrade"], headers["Sec-WebSocket-Key"]; v1 != "" && v1 == "websocket" && v2 != "" && req[0] == "GET" {
 				request_type = "websocket"
+				sec_web_accept = getSecWebSocketAccept(headers["Sec-WebSocket-Key"])
 			}
 		}
 	}
+
+	fmt.Println(headers)
 
 	switch(request_type) {
 		case "websocket":
@@ -194,6 +187,12 @@ func handleConnection(conn net.Conn) {
 
 			// upgrade to websocket connection
 			if is_valid {
+				fmt.Println(headers["Sec-WebSocket-Key"], sec_web_accept)
+				resp := append([]byte("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: "), []byte(sec_web_accept)...)
+
+				resp = append(resp, []byte("\r\n\r\n")...)
+				fmt.Println(string(resp), resp)
+				connection.Write(resp)
 				upgrateToWebSocket(&connection)
 			}
 			break
