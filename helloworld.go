@@ -34,18 +34,60 @@ func readWebsocketFrame() {
 
 
     fin := a[0]&0x80 >> 7
+	if fin == 1 {
+		fmt.Println("finished message")
+	} else {
+		fmt.Println("read next frame of message")
+	}
 
     opCode, payloadType := opcode(a[0])
 
     fmt.Println(fin, opCode, payloadType)
 
+	mask := a[1]&0x80 >> 7
+	if mask == 1 {
+		fmt.Println("valid mask from client...")
+	} else {
+		fmt.Println("mask not found... disconnect websocket..")
+	}
+
+	bytes_read := 2
+
+	payloadLength := a[1]&0x7f
+	// if payloadLength == 0x7e {
+	if payloadLength == 126 {
+		fmt.Println("next 16bit - 2 bytes(a[2]a[3]) is length but not supported")
+		bytes_read += 2
+	}
+	// if payloadLength == 0x7f {
+	if payloadLength == 127 {
+		fmt.Println("next 64bit - 8 bytes(a[2]a[3]a[4]a[5]a[6]a[7]a[8]a[9]) is length but not supported")
+		bytes_read += 8
+	}
+
+	var payload []byte
+
+	fmt.Println("Payload Length is ", payloadLength)
+	if mask == 1 {
+
+		mask_key := a[bytes_read:bytes_read+4]
+		fmt.Println("Mask key is ", mask_key)
+
+		bytes_read += 4
+
+		var ch byte
+		for k,v := range a[bytes_read:] {
+			ch = v^mask_key[k%4]
+			payload = append(payload, ch)
+		}
+
+		fmt.Println("Payload is", string(payload), payload, a[bytes_read:])
+	}
+
+
+
  //    fmt.Println(a[0]&0x80)
  //    b := a[0]&0x80 >> 7
- //    if b == 1 {
- //    	fmt.Println("finished message")
-	// } else {
- //    	fmt.Println("read next frame of message")
-	// }
 
 
 }
