@@ -1,20 +1,20 @@
 function onOpen(evt) {
-	alert("ws connection established");
+	console.log("ws connection established");
 	console.log(evt);
 }
 
 function onClose(evt) {
-	alert("closing");
+	console.log("closing");
 	console.log(evt);
 }
 
 function onMessage(evt) {
-	alert(evt.data);
+	console.log(evt.data);
 	console.log(evt);
 }
 
 function onError(evt) {
-	alert("error");
+	console.log("error");
 	console.log(evt);
 }
 

@@ -11,7 +11,7 @@ func main() {
 	gosocket.OnWebsocketOpen = func(conn *gosocket.Conn, a *[]byte) bool {
 		data := *a
 		fmt.Println("Opening Websocket")
-		fmt.Println(string(data))
+		fmt.Println(string(data), data)
 		// conn.Write([]byte("Request data received ------ "))
 		// conn.Write(data)
 		return true
@@ -21,7 +21,7 @@ func main() {
 	// 2) on message
 	gosocket.OnMessage = func(conn *gosocket.Conn, a *[]byte) {
 		data := *a
-		fmt.Println(string(data))
+		fmt.Println(string(data), data)
 		conn.Write([]byte("Message received ------ "))
 		conn.Write(data)
 	}
