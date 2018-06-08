@@ -14,6 +14,7 @@ type Conn struct {
 	conn	 net.Conn
 	desc 	 *netpoll.Desc
 	poller   *netpoll.Poller
+	message  []byte
 }
 
 func (c *Conn) Read() *[]byte {
@@ -188,7 +189,7 @@ func handleConnection(conn net.Conn) {
 			// upgrade to websocket connection
 			if is_valid {
 				fmt.Println(headers["Sec-WebSocket-Key"], sec_web_accept)
-				resp := append([]byte("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: "), []byte(sec_web_accept)...)
+				resp := append([]byte("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nContent-Encoding: identity\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: "), []byte(sec_web_accept)...)
 
 				resp = append(resp, []byte("\r\n\r\n")...)
 				fmt.Println(string(resp), resp)
@@ -214,6 +215,15 @@ func upgrateToWebSocket(c *Conn) {
 	desc := conn.desc
 
 	poller.Start(desc, func(ev netpoll.Event) {
+
+
+		defer func() {
+			if r := recover(); r != nil {
+				fmt.Println("Recovered in f", r)
+				conn.Close()
+			}
+		}()
+
 
 		fmt.Println(ev)
 

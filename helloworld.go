@@ -33,8 +33,8 @@ func readWebsocketFrame() {
     // }
 
 
-    fin := a[0]&0x80 >> 7
-	if fin == 1 {
+    fin := (a[0]&0x80 >> 7 == 1)
+	if fin {
 		fmt.Println("finished message")
 	} else {
 		fmt.Println("read next frame of message")
