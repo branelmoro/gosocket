@@ -5,6 +5,7 @@ import (
 	"strings"
 	"crypto/sha1"
 	"encoding/base64"
+	"encoding/binary"
 )
 
 // this is a comment
@@ -12,12 +13,43 @@ import (
 func main() {
     fmt.Println("Hello World")
 
+    byte2int()
+
+    var a error
+
+    a = nil
+
+    fmt.Println(a)
+    return
 
     // readHTTP()
+    p,q,r := testy()
+    fmt.Println(p,q,r)
 
-    readWebsocketFrame()
+    // readWebsocketFrame()
+
+    var (
+    	b int
+    	z uint
+    )
+
+    b = 200
+    z = (uint(b) << 45)
+    fmt.Println(z, b)
 }
 
+func byte2int() {
+        aa := uint(0x7FFFFFFF)
+        fmt.Println(aa)
+        slice := []byte{0xFF, 0xFF, 0xFF, 0x7F}
+        tt := binary.BigEndian.Uint32(slice)
+        fmt.Println(tt)
+}
+
+
+func testy() (int,*int,int) {
+	return 354,nil,767
+}
 
 func readWebsocketFrame() {
 	

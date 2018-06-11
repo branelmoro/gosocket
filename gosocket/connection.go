@@ -217,17 +217,19 @@ func upgrateToWebSocket(c *Conn) {
 	poller.Start(desc, func(ev netpoll.Event) {
 
 
-		defer func() {
-			if r := recover(); r != nil {
-				fmt.Println("Recovered in f", r)
-				conn.Close()
-			}
-		}()
+		// defer func() {
+		// 	if r := recover(); r != nil {
+		// 		fmt.Println("Recovered in f", r)
+		// 		conn.Close()
+		// 	}
+		// }()
 
 
 		fmt.Println(ev)
 
-		OnMessage(c, conn.Read())
+		// OnMessage(c, conn.Read())
+
+		conn.readMessages()
 		// if ev&netpoll.EventReadHup != 0 {
 		//   // poller.Stop(desc)
 		//   conn.Close()
@@ -241,4 +243,13 @@ func upgrateToWebSocket(c *Conn) {
 		//
 	})
 
+}
+
+
+func closeWebsocketPanic(c *Conn) {
+	conn := *c
+	if r := recover(); r != nil {
+		fmt.Println("Recovered in f", r)
+		conn.Close()
+	}
 }
