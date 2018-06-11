@@ -166,7 +166,7 @@ func (c *Conn)readFrame() (bool, *[]byte, int, int, error) {
 			return fin, &frame_payload, payloadLength, byteCnt, err
 		}
 
-		num_bytes, buff, err = c.readBytes(2)
+		num_bytes, buff, err = c.readBytes(4)
 		byteCnt += num_bytes
 		if err != nil {
 			return fin, &frame_payload, payloadLength, byteCnt, err
