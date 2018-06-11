@@ -1,7 +1,7 @@
 package gosocket
 
 import(
-	"time"
+	// "time"
 	"fmt"
 	"io"
 )
@@ -130,6 +130,8 @@ func (c *Conn)readFrame() (bool, *[]byte, int, int, error) {
 
 	if mask {
 
+		fmt.Println("initial payloadLength - ", payloadLength)
+
 		if payloadLength == 126 {
 			num_bytes, buff, err = c.readBytes(2)
 			byteCnt += num_bytes
@@ -144,10 +146,11 @@ func (c *Conn)readFrame() (bool, *[]byte, int, int, error) {
 				return fin, &frame_payload, payloadLength, byteCnt, err
 			}
 
-			err = NewWsError(PAYLOAD_LENGTH_ERROR, "next 16bit - 2 bytes(a[2]a[3]) is length but not supported")
-			return fin, &frame_payload, payloadLength, byteCnt, err
-		}
-		if payloadLength == 127 {
+			fmt.Println("----------here----------")
+
+			// err = NewWsError(PAYLOAD_LENGTH_ERROR, "next 16bit - 2 bytes(a[2]a[3]) is length but not supported")
+			// return fin, &frame_payload, payloadLength, byteCnt, err
+		} else if payloadLength == 127 {
 
 			num_bytes, buff, err = c.readBytes(8)
 			byteCnt += num_bytes
@@ -156,15 +159,19 @@ func (c *Conn)readFrame() (bool, *[]byte, int, int, error) {
 			}
 
 			len_bytes := *buff
-			payloadLength = ((int(len_bytes[0]) << 56) | (int(len_bytes[0]) << 48) | (int(len_bytes[0]) << 40) | (int(len_bytes[0]) << 32) | (int(len_bytes[0]) << 24) | (int(len_bytes[0]) << 16) | (int(len_bytes[0]) << 8) | int(len_bytes[1]))
+			payloadLength = ((int(len_bytes[0]) << 56) | (int(len_bytes[1]) << 48) | (int(len_bytes[2]) << 40) | (int(len_bytes[3]) << 32) | (int(len_bytes[4]) << 24) | (int(len_bytes[5]) << 16) | (int(len_bytes[6]) << 8) | int(len_bytes[7]))
+
+			fmt.Println("64 bit Payload length - ", payloadLength)
 			if payloadLength < 65535 {
 				err = NewWsError(PAYLOAD_LENGTH_ERROR, "Invalid payload length in 64 bit")
 				return fin, &frame_payload, payloadLength, byteCnt, err
 			}
 
-			err = NewWsError(PAYLOAD_LENGTH_ERROR, "next 64bit - 8 bytes(a[2]a[3]a[4]a[5]a[6]a[7]a[8]a[9]) is length but not supported")
-			return fin, &frame_payload, payloadLength, byteCnt, err
+			// err = NewWsError(PAYLOAD_LENGTH_ERROR, "next 64bit - 8 bytes(a[2]a[3]a[4]a[5]a[6]a[7]a[8]a[9]) is length but not supported")
+			// return fin, &frame_payload, payloadLength, byteCnt, err
 		}
+
+		fmt.Println("final payloadLength - ", payloadLength)
 
 		num_bytes, buff, err = c.readBytes(4)
 		byteCnt += num_bytes
@@ -192,7 +199,6 @@ func (c *Conn)readFrame() (bool, *[]byte, int, int, error) {
 			}
 
 			for _, ch := range *buff {
-				fmt.Println(mask_count)
 				frame_payload = append(frame_payload, (ch^mask_key[mask_count]))
 				mask_count += 1
 				if mask_count == 4 {
@@ -261,8 +267,8 @@ func (c *Conn)readBytes(buff_size int) (int, *[]byte, error) {
 		num_bytes int
 	)
 
-	timeoutDuration := time.Duration(buff_size) * time.Millisecond
-	c.conn.SetReadDeadline(time.Now().Add(timeoutDuration))
+	// timeoutDuration := time.Duration(buff_size) * time.Millisecond
+	// c.conn.SetReadDeadline(time.Now().Add(timeoutDuration))
 
 	buff := make([]byte, buff_size)
 	num_bytes, err = c.conn.Read(buff)
