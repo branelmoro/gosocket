@@ -26,3 +26,4 @@ ws.onmessage = function(evt) { onMessage(evt) };
 ws.onerror = function(evt) { onError(evt) };
 
 ws.send("hello from browser");
+ws.close();

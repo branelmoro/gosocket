@@ -109,6 +109,8 @@ func (c *Conn)readFrame() (bool, *[]byte, int, int, error) {
 			break
 		case 0x8:
 			payloadType = "connection close"
+			// [136 128 132 166 99 33]
+			// 10001000 10000000 10000100 10100110 01100011 00100001
 			break
 		case 0x9:
 			payloadType = "ping"
