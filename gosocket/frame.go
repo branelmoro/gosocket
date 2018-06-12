@@ -1,7 +1,7 @@
 package gosocket
 
 import(
-	// "time"
+	"time"
 	"fmt"
 	"io"
 )
@@ -187,29 +187,17 @@ func (c *Conn)readFrame() (bool, *[]byte, int, int, error) {
 		)
 		mask_count = 0
 
-		cntBytesToRead := payloadLength
+		num_bytes, buff, err = c.readBytes(payloadLength)
+		fmt.Println(num_bytes, err)
 
-		for {
-			num_bytes, buff, err = c.readBytes(cntBytesToRead) 
-
-			byteCnt += num_bytes
-
-			if err != nil {
-				break
-			}
-
+		byteCnt += num_bytes
+		if err == nil {
 			for _, ch := range *buff {
 				frame_payload = append(frame_payload, (ch^mask_key[mask_count]))
 				mask_count += 1
 				if mask_count == 4 {
 					mask_count = 0
 				}
-			}
-
-			if num_bytes == cntBytesToRead {
-				break
-			} else {
-				cntBytesToRead -= num_bytes
 			}
 		}
 
@@ -261,29 +249,46 @@ func (c *Conn)readSecondByteFromFrame() (bool, int, int, error) {
 	return mask, payloadLength, num_bytes, err
 }
 
-func (c *Conn)readBytes(buff_size int) (int, *[]byte, error) {
+func (c *Conn)readBytes(size int) (int, *[]byte, error) {
 	var(
 		err error
 		num_bytes int
+		cntbytes int
+		read_bytes []byte
 	)
 
-	// timeoutDuration := time.Duration(buff_size) * time.Millisecond
-	// c.conn.SetReadDeadline(time.Now().Add(timeoutDuration))
+	cntbytes = 0
 
-	buff := make([]byte, buff_size)
-	num_bytes, err = c.conn.Read(buff)
+	buff := make([]byte, 1)
+	for {
 
-	if err != nil {
-		if err != io.EOF {
-			// panic(err)
-			fmt.Println("read error:", err)
-			err = NewWsError(READ_ERROR, err.Error())
-		} else {
-			err = NewWsError(EOF_ERROR, err.Error())
+		timeoutDuration := time.Millisecond
+		c.conn.SetReadDeadline(time.Now().Add(timeoutDuration))
+
+		num_bytes, err = c.conn.Read(buff)
+
+		if err != nil {
+			if err != io.EOF {
+				// panic(err)
+				fmt.Println("read error:", err)
+				err = NewWsError(READ_ERROR, err.Error())
+			} else {
+				err = NewWsError(EOF_ERROR, err.Error())
+			}
+			break
 		}
+
+		read_bytes = append(read_bytes, buff...)
+
+		cntbytes += num_bytes
+
+		if cntbytes == size {
+			break
+		}
+
 	}
 
-	return num_bytes, &buff, err
+	return cntbytes, &read_bytes, err
 }
 
 
