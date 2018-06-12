@@ -130,6 +130,8 @@ func (c *Conn)readFrame() (bool, *[]byte, int, int, error) {
 
 	if mask {
 
+		c.conn.SetReadDeadline(time.Time{})
+
 		fmt.Println("initial payloadLength - ", payloadLength)
 
 		if payloadLength == 126 {
@@ -219,6 +221,8 @@ func (c *Conn)readFirstByteFromFrame() (bool, bool, bool, bool, byte, int, error
 		buff *[]byte
 		num_bytes int
 	)
+
+	c.conn.SetReadDeadline(time.Now().Add(time.Second))
 	num_bytes, buff, err = c.readBytes(1)
 	if err == nil {
 		read_bytes := *buff
@@ -239,6 +243,8 @@ func (c *Conn)readSecondByteFromFrame() (bool, int, int, error) {
 		buff *[]byte
 		num_bytes int
 	)
+
+	c.conn.SetReadDeadline(time.Now().Add(time.Second))
 	num_bytes, buff, err = c.readBytes(1)
 
 	if err == nil {
@@ -249,46 +255,54 @@ func (c *Conn)readSecondByteFromFrame() (bool, int, int, error) {
 	return mask, payloadLength, num_bytes, err
 }
 
-func (c *Conn)readBytes(size int) (int, *[]byte, error) {
+func (c *Conn)readPayload(size int) (int, *[]byte, error) {
 	var(
 		err error
 		num_bytes int
 		cntbytes int
 		read_bytes []byte
+		buff *[]byte
 	)
-
 	cntbytes = 0
-
-	buff := make([]byte, 1)
-	for {
-
-		timeoutDuration := time.Millisecond
-		c.conn.SetReadDeadline(time.Now().Add(timeoutDuration))
-
-		num_bytes, err = c.conn.Read(buff)
-
-		if err != nil {
-			if err != io.EOF {
-				// panic(err)
-				fmt.Println("read error:", err)
-				err = NewWsError(READ_ERROR, err.Error())
-			} else {
-				err = NewWsError(EOF_ERROR, err.Error())
-			}
+	for{
+		num_bytes, buff, err = c.readBytes(size)
+		if err == nil {
 			break
 		}
 
-		read_bytes = append(read_bytes, buff...)
+		read_bytes = append(read_bytes, *buff...)
 
 		cntbytes += num_bytes
 
-		if cntbytes == size {
+		size -= num_bytes
+
+		if size == 0 {
 			break
 		}
+	}
+	return cntbytes, &read_bytes, err
+}
 
+func (c *Conn)readBytes(size int) (int, *[]byte, error) {
+	var(
+		err error
+		num_bytes int
+	)
+	buff := make([]byte, size)
+
+	num_bytes, err = c.conn.Read(buff)
+
+	if err != nil {
+		if err != io.EOF {
+			// panic(err)
+			fmt.Println("read error:", err)
+			err = NewWsError(READ_ERROR, err.Error())
+		} else {
+			err = NewWsError(EOF_ERROR, err.Error())
+		}
 	}
 
-	return cntbytes, &read_bytes, err
+	return num_bytes, &buff, err
 }
 
 

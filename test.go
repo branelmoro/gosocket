@@ -21,7 +21,7 @@ func main() {
 	// 2) on message
 	gosocket.OnMessage = func(conn *gosocket.Conn, a *[]byte) {
 		data := *a
-		fmt.Println(string(data), data)
+		fmt.Println(string(data))
 		// conn.Write([]byte("Message received ------ "))
 		// conn.Write(data)
 	}
