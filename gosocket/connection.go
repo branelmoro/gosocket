@@ -227,9 +227,9 @@ func upgrateToWebSocket(c *Conn) {
 
 		fmt.Println(ev)
 
-		OnMessage(c, conn.Read())
+		// OnMessage(c, conn.Read())
 
-		// conn.readMessages()
+		conn.readMessages()
 		// if ev&netpoll.EventReadHup != 0 {
 		//   // poller.Stop(desc)
 		//   conn.Close()

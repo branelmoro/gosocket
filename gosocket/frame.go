@@ -109,6 +109,13 @@ func (c *Conn)readFrame() (bool, *[]byte, int, int, error) {
 			break
 		case 0x8:
 			payloadType = "connection close"
+			// 136 130 245 134 144 67 246 110
+			// 10001000 10000010 11110101 10000110 10010000 01000011 11110110 01101110
+			// 11110101 10000110
+			// 11110110 01101110
+			// .................
+			// 00000011 11101000
+
 			// [136 128 132 166 99 33]
 			// 10001000 10000000 10000100 10100110 01100011 00100001
 			break
@@ -186,21 +193,24 @@ func (c *Conn)readFrame() (bool, *[]byte, int, int, error) {
 
 		fmt.Println(mask_key)
 
-		var (
-			mask_count int
-		)
-		mask_count = 0
+		if payloadLength > 0 {
 
-		num_bytes, buff, err = c.readBytes(payloadLength)
-		fmt.Println(num_bytes, err)
+			var (
+				mask_count int
+			)
+			mask_count = 0
 
-		byteCnt += num_bytes
-		if err == nil {
-			for _, ch := range *buff {
-				frame_payload = append(frame_payload, (ch^mask_key[mask_count]))
-				mask_count += 1
-				if mask_count == 4 {
-					mask_count = 0
+			num_bytes, buff, err = c.readPayload(payloadLength)
+			fmt.Println(num_bytes, err)
+
+			byteCnt += num_bytes
+			if err == nil {
+				for _, ch := range *buff {
+					frame_payload = append(frame_payload, (ch^mask_key[mask_count]))
+					mask_count += 1
+					if mask_count == 4 {
+						mask_count = 0
+					}
 				}
 			}
 		}
@@ -268,7 +278,7 @@ func (c *Conn)readPayload(size int) (int, *[]byte, error) {
 	cntbytes = 0
 	for{
 		num_bytes, buff, err = c.readBytes(size)
-		if err == nil {
+		if err != nil {
 			break
 		}
 
