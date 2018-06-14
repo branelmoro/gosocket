@@ -8,8 +8,43 @@ import(
 
 
 type Message struct {
-	opcode byte,
+	opcode byte
 	data *[]byte
+}
+
+func (c *Message) GetData() *[]byte {
+	return c.data
+}
+
+func (c *Conn) WriteMessage(data *[]byte) {
+	var (
+		message []byte
+		length_bytes []byte
+		length int
+		// opcode byte
+		first_byte byte
+		second_byte byte
+	)
+	length = len(*data)
+	// opcode = 0x01
+
+	first_byte = 0x81
+	if length <= 125 {
+		second_byte = byte(length)
+	} else {
+		if length <= 65535 {
+			second_byte = byte(126)
+			length_bytes = []byte{byte(length >> 8),byte(length >> 0)}
+		} else {
+			second_byte = byte(127)
+			length_bytes = []byte{byte(length >> 48),byte(length >> 48),byte(length >> 40),byte(length >> 32),byte(length >> 24),byte(length >> 16),byte(length >> 8),byte(length)}
+		}
+	}
+
+	message = append(message, first_byte, second_byte)
+	message = append(message, length_bytes...)
+	message = append(message, *data...)
+	c.conn.Write(message)
 }
 
 
@@ -90,6 +125,7 @@ func (c *Conn)readFrame() (bool, *[]byte, byte, int, int, error) {
 		rsv2 bool
 		rsv3 bool
 		opcode byte
+		second_byte byte
 		mask bool
 		payloadLength int
 		mask_key []byte
@@ -144,57 +180,30 @@ func (c *Conn)readFrame() (bool, *[]byte, byte, int, int, error) {
 			return fin, &frame_payload, opcode, payloadLength, byteCnt, err
 	}
 
-	mask, payloadLength, num_bytes, err = c.readSecondByteFromFrame()
+	// mask, payloadLength, num_bytes, err = c.readSecondByteFromFrame()
+	// byteCnt += num_bytes
+	// if err != nil {
+	// 	return fin, &frame_payload, opcode, payloadLength, byteCnt, err
+	// }
+
+	num_bytes, buff, err = c.readBytes(1)
+	byteCnt += num_bytes
+	if err != nil {
+		return fin, &frame_payload, opcode, payloadLength, byteCnt, err
+	}
+	read_bytes      := *buff
+	second_byte     = read_bytes[0]
+	mask            = (second_byte&0x80 >> 7 == 1)
+
+	num_bytes, payloadLength, err = c.readPayloadSize(second_byte)
 	byteCnt += num_bytes
 	if err != nil {
 		return fin, &frame_payload, opcode, payloadLength, byteCnt, err
 	}
 
-
 	if mask {
 
 		c.conn.SetReadDeadline(time.Time{})
-
-		fmt.Println("initial payloadLength - ", payloadLength)
-
-		if payloadLength == 126 {
-			num_bytes, buff, err = c.readBytes(2)
-			byteCnt += num_bytes
-			if err != nil {
-				return fin, &frame_payload, opcode, payloadLength, byteCnt, err
-			}
-
-			len_bytes := *buff
-			payloadLength = ((int(len_bytes[0]) << 8) | int(len_bytes[1]))
-			if payloadLength < 126 {
-				err = NewWsError(PAYLOAD_LENGTH_ERROR, "Invalid payload length in 16 bit")
-				return fin, &frame_payload, opcode, payloadLength, byteCnt, err
-			}
-
-			fmt.Println("----------here----------")
-
-			// err = NewWsError(PAYLOAD_LENGTH_ERROR, "next 16bit - 2 bytes(a[2]a[3]) is length but not supported")
-			// return fin, &frame_payload, payloadLength, byteCnt, err
-		} else if payloadLength == 127 {
-
-			num_bytes, buff, err = c.readBytes(8)
-			byteCnt += num_bytes
-			if err != nil {
-				return fin, &frame_payload, opcode, payloadLength, byteCnt, err
-			}
-
-			len_bytes := *buff
-			payloadLength = ((int(len_bytes[0]) << 56) | (int(len_bytes[1]) << 48) | (int(len_bytes[2]) << 40) | (int(len_bytes[3]) << 32) | (int(len_bytes[4]) << 24) | (int(len_bytes[5]) << 16) | (int(len_bytes[6]) << 8) | int(len_bytes[7]))
-
-			fmt.Println("64 bit Payload length - ", payloadLength)
-			if payloadLength < 65535 {
-				err = NewWsError(PAYLOAD_LENGTH_ERROR, "Invalid payload length in 64 bit")
-				return fin, &frame_payload, opcode, payloadLength, byteCnt, err
-			}
-
-			// err = NewWsError(PAYLOAD_LENGTH_ERROR, "next 64bit - 8 bytes(a[2]a[3]a[4]a[5]a[6]a[7]a[8]a[9]) is length but not supported")
-			// return fin, &frame_payload, payloadLength, byteCnt, err
-		}
 
 		fmt.Println("final payloadLength - ", payloadLength)
 
@@ -214,7 +223,7 @@ func (c *Conn)readFrame() (bool, *[]byte, byte, int, int, error) {
 			)
 			mask_count = 0
 
-			num_bytes, buff, err = c.readPayload(payloadLength)
+			num_bytes, buff, err = c.readBytes(payloadLength)
 			fmt.Println(num_bytes, err)
 
 			byteCnt += num_bytes
@@ -261,6 +270,54 @@ func (c *Conn)readFirstByteFromFrame() (bool, bool, bool, bool, byte, int, error
 	return fin, rsv1, rsv2, rsv3, opcode, num_bytes, err
 }
 
+func (c *Conn)readPayloadSize(second_byte byte) (int, int, error) {
+
+	var(
+		err error
+		num_bytes int
+		buff *[]byte
+		shift uint8
+		payloadLength int
+		ch byte
+	)
+
+	payloadLength   = int(second_byte&0x7f)
+	num_bytes       = 0
+
+	if payloadLength > 125 {
+		if payloadLength == 126 {
+			num_bytes = 2
+			shift = 8
+		} else if payloadLength == 127 {
+			num_bytes = 8
+			shift = 56
+		}
+		
+		num_bytes, buff, err = c.readBytes(num_bytes)
+
+		if err != nil {
+			return num_bytes, payloadLength, err
+		}
+
+		payloadLength = 0
+		for _, ch = range *buff {
+			payloadLength |= (int(ch) << shift)
+			shift -= 8
+		}
+
+		if num_bytes == 2 && payloadLength < 126 {
+			err = NewWsError(PAYLOAD_LENGTH_ERROR, "Invalid payload length in 16 bit")
+			return num_bytes, payloadLength, err
+		}
+		if num_bytes == 8 && payloadLength < 65535 {
+			err = NewWsError(PAYLOAD_LENGTH_ERROR, "Invalid payload length in 64 bit")
+			return num_bytes, payloadLength, err
+		}
+	}
+
+	return num_bytes, payloadLength, err
+}
+
 func (c *Conn)readSecondByteFromFrame() (bool, int, int, error) {
 	var(
 		mask bool
@@ -281,7 +338,7 @@ func (c *Conn)readSecondByteFromFrame() (bool, int, int, error) {
 	return mask, payloadLength, num_bytes, err
 }
 
-func (c *Conn)readPayload(size int) (int, *[]byte, error) {
+func (c *Conn)readBytes(size int) (int, *[]byte, error) {
 	var(
 		err error
 		num_bytes int
@@ -290,15 +347,22 @@ func (c *Conn)readPayload(size int) (int, *[]byte, error) {
 		buff *[]byte
 	)
 	cntbytes = 0
+	byte_size := size
 	for{
-		num_bytes, buff, err = c.readBytes(size)
+		num_bytes, buff, err = c.readBytesInBuffer(size)
 		if err != nil {
 			break
 		}
 
-		read_bytes = append(read_bytes, *buff...)
-
 		cntbytes += num_bytes
+
+		if num_bytes == byte_size {
+			return cntbytes, buff, err
+		}
+
+		bytes_read := *buff
+
+		read_bytes = append(read_bytes, bytes_read[:(num_bytes-1)]...)
 
 		size -= num_bytes
 
@@ -309,7 +373,7 @@ func (c *Conn)readPayload(size int) (int, *[]byte, error) {
 	return cntbytes, &read_bytes, err
 }
 
-func (c *Conn)readBytes(size int) (int, *[]byte, error) {
+func (c *Conn)readBytesInBuffer(size int) (int, *[]byte, error) {
 	var(
 		err error
 		num_bytes int

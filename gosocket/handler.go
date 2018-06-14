@@ -14,7 +14,7 @@ import (
 
 type socketOpenCb func(*Conn, *[]byte) bool
 
-type messageCb func(*Conn, *[]byte)
+type messageCb func(*Conn, *Message)
 
 type errorCb func(*Conn)
 

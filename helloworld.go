@@ -13,29 +13,42 @@ import (
 func main() {
     fmt.Println("Hello World")
 
-    byte2int()
+    // byte2int()
 
-    var a error
+    // var a error
 
-    a = nil
+    // a = nil
 
-    fmt.Println(a)
-    return
+    // fmt.Println(a)
+    // return
 
-    // readHTTP()
-    p,q,r := testy()
-    fmt.Println(p,q,r)
+    // // readHTTP()
+    // p,q,r := testy()
+    // fmt.Println(p,q,r)
 
-    // readWebsocketFrame()
+    // // readWebsocketFrame()
 
-    var (
-    	b int
-    	z uint
-    )
+    // var (
+    // 	b int
+    // 	z uint
+    // )
 
-    b = 200
-    z = (uint(b) << 45)
-    fmt.Println(z, b)
+    // b = 200
+    // z = (uint(b) << 45)
+    // fmt.Println(z, b)
+
+    var abc int
+    abc = 2344342
+    // 100011 11000101 10010110
+    // 35 197 150
+    length_bytes := []byte{byte(abc >> 16),byte(abc >> 8),byte(abc >> 0)}
+    fmt.Println(length_bytes)
+    p := byte(abc >> 0)
+    fmt.Println(p)
+    p = byte(abc >> 8)
+    fmt.Println(p)
+    p = byte(abc >> 16)
+    fmt.Println(p)
 }
 
 func byte2int() {

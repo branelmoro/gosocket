@@ -17,12 +17,15 @@ func main() {
 		return true
 	}
 
-
 	// 2) on message
-	gosocket.OnMessage = func(conn *gosocket.Conn, a *[]byte) {
-		data := *a
+	gosocket.OnMessage = func(conn *gosocket.Conn, a *gosocket.Message) {
+		// message := *a
+		msg := a.GetData()
+		data := *msg
 		fmt.Println(string(data),data)
-		// conn.Write([]byte("Message received ------ "))
+
+		r_data := []byte("Message received ------ " + string(data))
+		conn.WriteMessage(&r_data)
 		// conn.Write(data)
 	}
 
