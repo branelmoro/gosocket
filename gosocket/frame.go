@@ -6,9 +6,16 @@ import(
 	"io"
 )
 
+
+type Message struct {
+	opcode byte,
+	data *[]byte
+}
+
+
 func (c *Conn) readMessages() {
 	var(
-		message *[]byte
+		message *Message
 		byteCnt int
 		err error
 		msg_len int
@@ -27,18 +34,20 @@ func (c *Conn) readMessages() {
 	fmt.Println(msg_len)
 }
 
-func (c *Conn) readMessage() (*[]byte, int, int, error) {
+func (c *Conn) readMessage() (*Message, int, int, error) {
 
 	var(
 		fin bool
 		frame_payload *[]byte
 		payloadLength int
 		num_bytes int
-		message []byte
+		msg_bytes []byte
 		is_first bool
 		byteCnt int
 		err error
 		msg_len int
+		opcode byte
+		msg_opcode byte
 	)
 
 	is_first = true
@@ -48,7 +57,12 @@ func (c *Conn) readMessage() (*[]byte, int, int, error) {
 	fmt.Println(is_first)
 
 	for {
-		fin, frame_payload, payloadLength, num_bytes, err = c.readFrame()
+		fin, frame_payload, opcode, payloadLength, num_bytes, err = c.readFrame()
+
+		if is_first {
+			is_first = false
+			msg_opcode = opcode
+		}
 
 		byteCnt += num_bytes
 		msg_len += payloadLength
@@ -57,18 +71,18 @@ func (c *Conn) readMessage() (*[]byte, int, int, error) {
 			break
 		}
 
-		message = append(message, *frame_payload...)
+		msg_bytes = append(msg_bytes, *frame_payload...)
 
 		if fin {
 			break
 		}
 	}
 
-	return &message, msg_len, byteCnt, err
+	return &Message{opcode:msg_opcode,data:&msg_bytes}, msg_len, byteCnt, err
 }
 
 
-func (c *Conn)readFrame() (bool, *[]byte, int, int, error) {
+func (c *Conn)readFrame() (bool, *[]byte, byte, int, int, error) {
 
 	var(
 		fin bool
@@ -94,7 +108,7 @@ func (c *Conn)readFrame() (bool, *[]byte, int, int, error) {
 	fmt.Println(rsv3,rsv2,rsv1,payloadType)
 	byteCnt += num_bytes
 	if err != nil {
-		return fin, &frame_payload, payloadLength, byteCnt, err
+		return fin, &frame_payload, opcode, payloadLength, byteCnt, err
 	}
 
 	switch (opcode) {
@@ -127,13 +141,13 @@ func (c *Conn)readFrame() (bool, *[]byte, int, int, error) {
 			break
 		default:
 			err = NewWsError(PAYLOAD_LENGTH_ERROR, "Invalid frame opcode...reserved for non-control")
-			return fin, &frame_payload, payloadLength, byteCnt, err
+			return fin, &frame_payload, opcode, payloadLength, byteCnt, err
 	}
 
 	mask, payloadLength, num_bytes, err = c.readSecondByteFromFrame()
 	byteCnt += num_bytes
 	if err != nil {
-		return fin, &frame_payload, payloadLength, byteCnt, err
+		return fin, &frame_payload, opcode, payloadLength, byteCnt, err
 	}
 
 
@@ -147,14 +161,14 @@ func (c *Conn)readFrame() (bool, *[]byte, int, int, error) {
 			num_bytes, buff, err = c.readBytes(2)
 			byteCnt += num_bytes
 			if err != nil {
-				return fin, &frame_payload, payloadLength, byteCnt, err
+				return fin, &frame_payload, opcode, payloadLength, byteCnt, err
 			}
 
 			len_bytes := *buff
 			payloadLength = ((int(len_bytes[0]) << 8) | int(len_bytes[1]))
 			if payloadLength < 126 {
 				err = NewWsError(PAYLOAD_LENGTH_ERROR, "Invalid payload length in 16 bit")
-				return fin, &frame_payload, payloadLength, byteCnt, err
+				return fin, &frame_payload, opcode, payloadLength, byteCnt, err
 			}
 
 			fmt.Println("----------here----------")
@@ -166,7 +180,7 @@ func (c *Conn)readFrame() (bool, *[]byte, int, int, error) {
 			num_bytes, buff, err = c.readBytes(8)
 			byteCnt += num_bytes
 			if err != nil {
-				return fin, &frame_payload, payloadLength, byteCnt, err
+				return fin, &frame_payload, opcode, payloadLength, byteCnt, err
 			}
 
 			len_bytes := *buff
@@ -175,7 +189,7 @@ func (c *Conn)readFrame() (bool, *[]byte, int, int, error) {
 			fmt.Println("64 bit Payload length - ", payloadLength)
 			if payloadLength < 65535 {
 				err = NewWsError(PAYLOAD_LENGTH_ERROR, "Invalid payload length in 64 bit")
-				return fin, &frame_payload, payloadLength, byteCnt, err
+				return fin, &frame_payload, opcode, payloadLength, byteCnt, err
 			}
 
 			// err = NewWsError(PAYLOAD_LENGTH_ERROR, "next 64bit - 8 bytes(a[2]a[3]a[4]a[5]a[6]a[7]a[8]a[9]) is length but not supported")
@@ -187,7 +201,7 @@ func (c *Conn)readFrame() (bool, *[]byte, int, int, error) {
 		num_bytes, buff, err = c.readBytes(4)
 		byteCnt += num_bytes
 		if err != nil {
-			return fin, &frame_payload, payloadLength, byteCnt, err
+			return fin, &frame_payload, opcode, payloadLength, byteCnt, err
 		}
 		mask_key = *buff
 
@@ -215,7 +229,7 @@ func (c *Conn)readFrame() (bool, *[]byte, int, int, error) {
 			}
 		}
 
-		return fin, &frame_payload, payloadLength, byteCnt, err
+		return fin, &frame_payload, opcode, payloadLength, byteCnt, err
 	} else {
 		panic("mask not found... disconnect websocket..")
 	}
