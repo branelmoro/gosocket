@@ -44,9 +44,17 @@ func (c *Conn) WriteMessage(data *[]byte) {
 	message = append(message, first_byte, second_byte)
 	message = append(message, length_bytes...)
 	message = append(message, *data...)
-	c.conn.Write(message)
+	c.write(&message)
 }
 
+func (c *Conn) write(data *[]byte) {
+	c.conn.Write(*message)
+}
+
+func (c *Conn) CloseWebsocket(code int) {
+
+
+}
 
 func (c *Conn) readMessages() {
 	var(
@@ -237,11 +245,10 @@ func (c *Conn)readFrame() (bool, *[]byte, byte, int, int, error) {
 				}
 			}
 		}
-
-		return fin, &frame_payload, opcode, payloadLength, byteCnt, err
 	} else {
-		panic("mask not found... disconnect websocket..")
+		err = NewWsError(MASK_BIT_ERROR, "Mask bit not found")
 	}
+	return fin, &frame_payload, opcode, payloadLength, byteCnt, err
 }
 
 
