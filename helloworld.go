@@ -37,18 +37,20 @@ func main() {
     // z = (uint(b) << 45)
     // fmt.Println(z, b)
 
-    var abc int
-    abc = 2344342
-    // 100011 11000101 10010110
-    // 35 197 150
-    length_bytes := []byte{byte(abc >> 16),byte(abc >> 8),byte(abc >> 0)}
-    fmt.Println(length_bytes)
-    p := byte(abc >> 0)
-    fmt.Println(p)
-    p = byte(abc >> 8)
-    fmt.Println(p)
-    p = byte(abc >> 16)
-    fmt.Println(p)
+    // var abc int
+    // abc = 2344342
+    // // 100011 11000101 10010110
+    // // 35 197 150
+    // length_bytes := []byte{byte(abc >> 16),byte(abc >> 8),byte(abc >> 0)}
+    // fmt.Println(length_bytes)
+    // p := byte(abc >> 0)
+    // fmt.Println(p)
+    // p = byte(abc >> 8)
+    // fmt.Println(p)
+    // p = byte(abc >> 16)
+    // fmt.Println(p)
+    var psc *int
+    fmt.Println(psc)
 }
 
 func byte2int() {

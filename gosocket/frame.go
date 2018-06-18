@@ -6,7 +6,6 @@ import(
 	"io"
 )
 
-
 type Message struct {
 	opcode byte
 	data *[]byte
@@ -17,6 +16,10 @@ func (c *Message) GetData() *[]byte {
 }
 
 func (c *Conn) WriteMessage(data *[]byte) {
+	c.write(true, false, false, false, 0x01, data)
+}
+
+func (c *Conn) write(fin bool, rsv1 bool, rsv2 bool, rsv3 bool, opcode byte, data *[]byte) {
 	var (
 		message []byte
 		length_bytes []byte
@@ -25,10 +28,27 @@ func (c *Conn) WriteMessage(data *[]byte) {
 		first_byte byte
 		second_byte byte
 	)
-	length = len(*data)
-	// opcode = 0x01
+	if data == nil {
+		length = 0
+	} else {
+		length = len(*data)
+	}
 
-	first_byte = 0x81
+	first_byte = opcode
+
+	if fin {
+		first_byte |= 0x80
+	}
+	if rsv1 {
+		first_byte |= 0x40
+	}
+	if rsv2 {
+		first_byte |= 0x20
+	}
+	if rsv3 {
+		first_byte |= 0x10
+	}
+
 	if length <= 125 {
 		second_byte = byte(length)
 	} else {
@@ -44,16 +64,12 @@ func (c *Conn) WriteMessage(data *[]byte) {
 	message = append(message, first_byte, second_byte)
 	message = append(message, length_bytes...)
 	message = append(message, *data...)
-	c.write(&message)
-}
-
-func (c *Conn) write(data *[]byte) {
-	c.conn.Write(*message)
+	c.conn.Write(message)
 }
 
 func (c *Conn) CloseWebsocket(code int) {
-
-
+	length_bytes := []byte{byte(code >> 8),byte(code >> 0)}
+	c.write(true, false, false, false, 0x08, &length_bytes)
 }
 
 func (c *Conn) readMessages() {
@@ -71,10 +87,28 @@ func (c *Conn) readMessages() {
 			}
 			break
 		} else {
-			OnMessage(c, message)
+
+			switch (message.opcode) {
+				case 0x0:
+				case 0x1:
+				case 0x2:
+					OnMessage(c, message)
+					break
+				case 0x8:
+					OnClose(c, message)
+					c.CloseWebsocket(NORMAL_CLOSURE)
+					break
+				case 0x9:
+					// send pong on ping
+					msg := *message
+					c.write(true, false, false, false, 0x0A, msg.data)
+					break
+				case 0xA:
+					break
+			}
 		}
+		fmt.Println(msg_len)
 	}
-	fmt.Println(msg_len)
 }
 
 func (c *Conn) readMessage() (*Message, int, int, error) {
@@ -102,15 +136,18 @@ func (c *Conn) readMessage() (*Message, int, int, error) {
 	for {
 		fin, frame_payload, opcode, payloadLength, num_bytes, err = c.readFrame()
 
-		if is_first {
-			is_first = false
-			msg_opcode = opcode
-		}
-
 		byteCnt += num_bytes
 		msg_len += payloadLength
 
 		if err != nil {
+			break
+		}
+
+		if is_first {
+			is_first = false
+			msg_opcode = opcode
+		} else if opcode != 0x0 {
+			err = NewWsError(OPCODE_ERROR, "Invalid frame opcode...reserved for non-control")
 			break
 		}
 
@@ -184,7 +221,7 @@ func (c *Conn)readFrame() (bool, *[]byte, byte, int, int, error) {
 			payloadType = "pong"
 			break
 		default:
-			err = NewWsError(PAYLOAD_LENGTH_ERROR, "Invalid frame opcode...reserved for non-control")
+			err = NewWsError(OPCODE_ERROR, "Invalid frame opcode...reserved for non-control")
 			return fin, &frame_payload, opcode, payloadLength, byteCnt, err
 	}
 

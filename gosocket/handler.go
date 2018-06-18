@@ -18,42 +18,9 @@ type messageCb func(*Conn, *Message)
 
 type errorCb func(*Conn)
 
-type closeCb func(*Conn)
-
-
-// var onWebsocketOpen socketOpenCb
-// var onMessage messageCb
-// var onError errorCb
-// var onClose closeCb
-
-
-// func OnWebsocketOpen(cb socketOpenCb) {
-// 	onWebsocketOpen = cb
-// }
-
-// func OnMessage(cb messageCb) {
-//     onMessage = cb
-// }
-
-// func OnError(cb errorCb) {
-//     onError = cb
-// }
-
-// func OnClose(cb closeCb) {
-//     onClose = cb
-// }
-
-
 var(
     OnWebsocketOpen socketOpenCb
     OnMessage messageCb
     OnError errorCb
-    OnClose closeCb
+    OnClose messageCb
 )
-
-
-
-// var OnWebsocketOpen socketOpenCb
-// var OnMessage messageCb
-// var OnError errorCb
-// var OnClose closeCb

@@ -36,7 +36,7 @@ func main() {
 	}
 
 	// 4) on connection close
-	gosocket.OnClose = func(conn *gosocket.Conn) {
+	gosocket.OnClose = func(conn *gosocket.Conn, a *gosocket.Message) {
 
 		fmt.Println("in OnClose------------")
 
