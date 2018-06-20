@@ -19,6 +19,13 @@ func (c *Conn) WriteMessage(data *[]byte) {
 	c.write(true, false, false, false, 0x01, data)
 }
 
+func (c *Conn) close() {
+	p := *c.poller
+	p.Stop(c.desc)
+	c.desc.Close()
+	c.conn.Close()
+}
+
 func (c *Conn) write(fin bool, rsv1 bool, rsv2 bool, rsv3 bool, opcode byte, data *[]byte) {
 	var (
 		message []byte
@@ -70,6 +77,15 @@ func (c *Conn) write(fin bool, rsv1 bool, rsv2 bool, rsv3 bool, opcode byte, dat
 func (c *Conn) CloseWebsocket(code int) {
 	length_bytes := []byte{byte(code >> 8),byte(code >> 0)}
 	c.write(true, false, false, false, 0x08, &length_bytes)
+	c.close()
+}
+
+func (c *Conn) Ping(data *[]byte) {
+	c.write(true, false, false, false, 0x09, data)
+}
+
+func (c *Conn) Pong(data *[]byte) {
+	c.write(true, false, false, false, 0x0A, data)
 }
 
 func (c *Conn) readMessages() {
@@ -83,27 +99,27 @@ func (c *Conn) readMessages() {
 		message, msg_len, byteCnt, err = c.readMessage()
 		if err != nil {
 			if byteCnt > 0 {
-				c.Close()
+				c.CloseWebsocket(PROTOCOL_ERROR)
 			}
 			break
 		} else {
 
 			switch (message.opcode) {
-				case 0x0:
-				case 0x1:
-				case 0x2:
+				case 0x0://continuation
+				case 0x1://text
+				case 0x2://binary
 					OnMessage(c, message)
 					break
-				case 0x8:
+				case 0x8://close
 					OnClose(c, message)
 					c.CloseWebsocket(NORMAL_CLOSURE)
 					break
-				case 0x9:
+				case 0x9://ping
 					// send pong on ping
 					msg := *message
-					c.write(true, false, false, false, 0x0A, msg.data)
+					c.Pong(msg.data)
 					break
-				case 0xA:
+				case 0xA://pong
 					break
 			}
 		}
@@ -119,7 +135,7 @@ func (c *Conn) readMessage() (*Message, int, int, error) {
 		payloadLength int
 		num_bytes int
 		msg_bytes []byte
-		is_first bool
+		is_first_frame bool
 		byteCnt int
 		err error
 		msg_len int
@@ -127,11 +143,9 @@ func (c *Conn) readMessage() (*Message, int, int, error) {
 		msg_opcode byte
 	)
 
-	is_first = true
+	is_first_frame = true
 	byteCnt = 0
 	msg_len = 0
-
-	fmt.Println(is_first)
 
 	for {
 		fin, frame_payload, opcode, payloadLength, num_bytes, err = c.readFrame()
@@ -143,11 +157,11 @@ func (c *Conn) readMessage() (*Message, int, int, error) {
 			break
 		}
 
-		if is_first {
-			is_first = false
+		if is_first_frame {
+			is_first_frame = false
 			msg_opcode = opcode
 		} else if opcode != 0x0 {
-			err = NewWsError(OPCODE_ERROR, "Invalid frame opcode...reserved for non-control")
+			err = NewWsError(OPCODE_ERROR, "Invalid opcode in continuation frame...")
 			break
 		}
 
@@ -179,14 +193,13 @@ func (c *Conn)readFrame() (bool, *[]byte, byte, int, int, error) {
 		err error
 		byteCnt int
 		num_bytes int
-		payloadType string
 	)
 
 	byteCnt = 0
 
 	fin, rsv1, rsv2, rsv3, opcode, num_bytes, err = c.readFirstByteFromFrame()
 
-	fmt.Println(rsv3,rsv2,rsv1,payloadType)
+	fmt.Println(rsv3,rsv2,rsv1)
 	byteCnt += num_bytes
 	if err != nil {
 		return fin, &frame_payload, opcode, payloadLength, byteCnt, err
@@ -194,16 +207,9 @@ func (c *Conn)readFrame() (bool, *[]byte, byte, int, int, error) {
 
 	switch (opcode) {
 		case 0x0:
-			payloadType = "continuation"
-			break
 		case 0x1:
-			payloadType = "text"
-			break
 		case 0x2:
-			payloadType = "binary"
-			break
 		case 0x8:
-			payloadType = "connection close"
 			// 136 130 245 134 144 67 246 110
 			// 10001000 10000010 11110101 10000110 10010000 01000011 11110110 01101110
 			// 11110101 10000110
@@ -213,23 +219,14 @@ func (c *Conn)readFrame() (bool, *[]byte, byte, int, int, error) {
 
 			// [136 128 132 166 99 33]
 			// 10001000 10000000 10000100 10100110 01100011 00100001
-			break
 		case 0x9:
-			payloadType = "ping"
-			break
 		case 0xA:
-			payloadType = "pong"
 			break
 		default:
-			err = NewWsError(OPCODE_ERROR, "Invalid frame opcode...reserved for non-control")
+			err = NewWsError(OPCODE_ERROR, "Invalid opcode in frame...reserved for non-control")
 			return fin, &frame_payload, opcode, payloadLength, byteCnt, err
 	}
 
-	// mask, payloadLength, num_bytes, err = c.readSecondByteFromFrame()
-	// byteCnt += num_bytes
-	// if err != nil {
-	// 	return fin, &frame_payload, opcode, payloadLength, byteCnt, err
-	// }
 
 	num_bytes, buff, err = c.readBytes(1)
 	byteCnt += num_bytes
@@ -240,7 +237,7 @@ func (c *Conn)readFrame() (bool, *[]byte, byte, int, int, error) {
 	second_byte     = read_bytes[0]
 	mask            = (second_byte&0x80 >> 7 == 1)
 
-	num_bytes, payloadLength, err = c.readPayloadSize(second_byte)
+	num_bytes, payloadLength, err = c.readPayloadLength(second_byte)
 	byteCnt += num_bytes
 	if err != nil {
 		return fin, &frame_payload, opcode, payloadLength, byteCnt, err
@@ -314,7 +311,7 @@ func (c *Conn)readFirstByteFromFrame() (bool, bool, bool, bool, byte, int, error
 	return fin, rsv1, rsv2, rsv3, opcode, num_bytes, err
 }
 
-func (c *Conn)readPayloadSize(second_byte byte) (int, int, error) {
+func (c *Conn)readPayloadLength(second_byte byte) (int, int, error) {
 
 	var(
 		err error
@@ -360,26 +357,6 @@ func (c *Conn)readPayloadSize(second_byte byte) (int, int, error) {
 	}
 
 	return num_bytes, payloadLength, err
-}
-
-func (c *Conn)readSecondByteFromFrame() (bool, int, int, error) {
-	var(
-		mask bool
-		payloadLength int
-		err error
-		buff *[]byte
-		num_bytes int
-	)
-
-	c.conn.SetReadDeadline(time.Now().Add(time.Second))
-	num_bytes, buff, err = c.readBytes(1)
-
-	if err == nil {
-		read_bytes      := *buff
-		mask            = (read_bytes[0]&0x80 >> 7 == 1)
-		payloadLength   = int(read_bytes[0]&0x7f)
-	}
-	return mask, payloadLength, num_bytes, err
 }
 
 func (c *Conn)readBytes(size int) (int, *[]byte, error) {
