@@ -6,6 +6,8 @@ import (
 	"crypto/sha1"
 	"encoding/base64"
 	"encoding/binary"
+	"reflect"
+	"unsafe"
 )
 
 // this is a comment
@@ -51,6 +53,21 @@ func main() {
     // fmt.Println(p)
     var psc *int
     fmt.Println(psc)
+
+    a := 123
+
+    psc = &a
+    fmt.Println(psc)
+
+    fmt.Println(reflect.TypeOf(psc))
+
+    var z *int
+    var add uintptr
+    add = 0xc4200120b8
+
+    z = (*int)(unsafe.Pointer(add))
+    fmt.Println(*z)
+
 }
 
 func byte2int() {
