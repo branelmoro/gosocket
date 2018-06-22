@@ -189,11 +189,12 @@ func handleConnection(conn net.Conn) {
 			// upgrade to websocket connection
 			if is_valid {
 				fmt.Println(headers["Sec-WebSocket-Key"], sec_web_accept)
-				resp := append([]byte("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nContent-Encoding: identity\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: "), []byte(sec_web_accept)...)
+				resp := append([]byte("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: "), []byte(sec_web_accept)...)
+				// resp := append([]byte("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nContent-Encoding: identity\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: "), []byte(sec_web_accept)...)
 
 				resp = append(resp, []byte("\r\n\r\n")...)
 				fmt.Println(string(resp), resp)
-				connection.Write(resp)
+				connection.conn.Write(resp)
 				upgrateToWebSocket(&connection)
 			}
 			break
@@ -228,6 +229,7 @@ func upgrateToWebSocket(c *Conn) {
 		fmt.Println(ev)
 
 		// OnMessage(c, conn.Read())
+		// fmt.Println(conn.Read())
 
 		conn.readMessages()
 		// if ev&netpoll.EventReadHup != 0 {

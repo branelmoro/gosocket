@@ -21,6 +21,7 @@ func main() {
 	gosocket.OnMessage = func(conn *gosocket.Conn, a *gosocket.Message) {
 		// message := *a
 		msg := a.GetData()
+		fmt.Println("in OnMessage - ", msg)
 		data := *msg
 		fmt.Println(string(data),data)
 

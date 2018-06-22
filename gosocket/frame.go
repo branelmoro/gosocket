@@ -103,10 +103,13 @@ func (c *Conn) readMessages() {
 			}
 			break
 		} else {
-
+			fmt.Println("here-- - opcode - ", message.opcode, 0x1)
 			switch (message.opcode) {
 				case 0x0://continuation
+					break
 				case 0x1://text
+					OnMessage(c, message)
+					break
 				case 0x2://binary
 					OnMessage(c, message)
 					break
@@ -121,6 +124,8 @@ func (c *Conn) readMessages() {
 					break
 				case 0xA://pong
 					break
+				default:
+					fmt.Println("default case - opcode - ", message.opcode)
 			}
 		}
 		fmt.Println(msg_len)
@@ -205,10 +210,15 @@ func (c *Conn)readFrame() (bool, *[]byte, byte, int, int, error) {
 		return fin, &frame_payload, opcode, payloadLength, byteCnt, err
 	}
 
+	fmt.Println("Opcode is - ", opcode)
+
 	switch (opcode) {
 		case 0x0:
+			break
 		case 0x1:
+			break
 		case 0x2:
+			break
 		case 0x8:
 			// 136 130 245 134 144 67 246 110
 			// 10001000 10000010 11110101 10000110 10010000 01000011 11110110 01101110
@@ -220,6 +230,7 @@ func (c *Conn)readFrame() (bool, *[]byte, byte, int, int, error) {
 			// [136 128 132 166 99 33]
 			// 10001000 10000000 10000100 10100110 01100011 00100001
 		case 0x9:
+			break
 		case 0xA:
 			break
 		default:
@@ -306,7 +317,7 @@ func (c *Conn)readFirstByteFromFrame() (bool, bool, bool, bool, byte, int, error
 		rsv1    = (read_bytes[0]&0x40 >> 6 == 1)
 		rsv2    = (read_bytes[0]&0x20 >> 5 == 1)
 		rsv3    = (read_bytes[0]&0x10 >> 4 == 1)
-		opcode  = read_bytes[0]&0x0f >> 7
+		opcode  = read_bytes[0]&0x0f
 	}
 	return fin, rsv1, rsv2, rsv3, opcode, num_bytes, err
 }

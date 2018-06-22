@@ -6,8 +6,8 @@ import (
 	"crypto/sha1"
 	"encoding/base64"
 	"encoding/binary"
-	"reflect"
-	"unsafe"
+	// "reflect"
+	// "unsafe"
 )
 
 // this is a comment
@@ -51,24 +51,53 @@ func main() {
     // fmt.Println(p)
     // p = byte(abc >> 16)
     // fmt.Println(p)
-    var psc *int
-    fmt.Println(psc)
+    // var psc *int
+    // fmt.Println(psc)
 
-    a := 123
+    // a := 123
 
-    psc = &a
-    fmt.Println(psc)
+    // psc = &a
+    // fmt.Println(psc)
 
-    fmt.Println(reflect.TypeOf(psc))
+    // fmt.Println(reflect.TypeOf(psc))
 
-    var z *int
-    var add uintptr
-    add = 0xc4200120b8
+    // var z *int
+    // var add uintptr
+    // add = 0xc4200120b8
 
-    z = (*int)(unsafe.Pointer(add))
-    fmt.Println(*z)
+    // z = (*int)(unsafe.Pointer(add))
+    // fmt.Println(*z)
+
+    decrept()
 
 }
+
+func decrept() {
+	var a byte
+	a  = 1
+	fmt.Println(a, 0x1)
+	switch (a) {
+		case 0x0://continuation
+		case 0x1://text
+		case 0x2://binary
+			fmt.Println("calling cb - ")
+			break
+		case 0x8://close
+			break
+		case 0x9://ping
+			// send pong on ping
+			break
+		case 0xA://pong
+			break
+		default:
+			fmt.Println("default case - opcode - ")
+	}
+
+
+
+	// a := []byte{129 146 115 227 5 160 27 134 105 204 28 195 99 210 28 142 37 194 1 140 114 211 22 145}
+}
+
 
 func byte2int() {
         aa := uint(0x7FFFFFFF)

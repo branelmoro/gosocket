@@ -11,6 +11,7 @@ const (
 	MESSAGE_POLICY_VIOLATION    = 1008
 	TOO_BIG_MESSAGE             = 1009
 	UNEXPECTED_ERROR            = 1011
+	TLS_HANDSHAKE_FAILURE       = 1015
 )
 
 const (
