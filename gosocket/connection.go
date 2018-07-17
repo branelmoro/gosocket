@@ -192,6 +192,7 @@ func handleConnection(conn net.Conn) {
 				resp := append([]byte("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: "), []byte(sec_web_accept)...)
 				// resp := append([]byte("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nContent-Encoding: identity\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: "), []byte(sec_web_accept)...)
 
+				resp = append(resp, []byte("\r\nSec-WebSocket-Extensions: permessage-deflate")...)
 				resp = append(resp, []byte("\r\n\r\n")...)
 				fmt.Println(string(resp), resp)
 				connection.conn.Write(resp)

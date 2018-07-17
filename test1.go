@@ -19,7 +19,7 @@ func main() {
 // [242 72 205 201 201 7 4 0 0 255 255] ---- compressed
 // 0xf2 0x48 0xcd 0xc9 0xc9 0x07
 
-    inData := []byte{72,101,108,108,111}
+    inData := []byte{104,101,108,108,111,32,102,114,111,109,32,98,114,111,119,115,101,114}
 
     compressedData := new(bytes.Buffer) 
 
@@ -30,10 +30,16 @@ func main() {
 
     // ioutil.WriteFile("compressed.dat", compressedData.Bytes(), os.ModeAppend)
 
+// hello from browser
+    inData1 := []byte{202,72,205,201,201,87,72,43,202,207,85,72,42,202,47,47,78,45,2,0}
+    compressedData1 := new(bytes.Buffer) 
+    compressedData1.Write(inData1)
+
     deCompressedData := new(bytes.Buffer)
     decompress(compressedData, deCompressedData)
     // log.Print(deCompressedData)
     fmt.Println(deCompressedData.Bytes())
+    fmt.Println(string(deCompressedData.Bytes()))
     // fmt.Println(byte(deCompressedData))
 }
 func compress(src []byte, dest io.Writer, level int) {
