@@ -5,7 +5,7 @@ import (
     "net"
     "os"
     // "time"
-    // "github.com/mailru/easygo/netpoll"
+    "github.com/mailru/easygo/netpoll"
     // "runtime"
 )
 
@@ -37,7 +37,20 @@ func StartServer() {
         // Handle connections in a new goroutine.
         // go handleRequest(conn)
         // go handleConn(conn)
-        go handleConnection(conn)
+
+        poller, err1 := netpoll.New(nil)
+        if err1 != nil {
+            conn.Write([]byte("Unable to initialize netpoll... Closing Connection..."))
+            conn.Close()
+            return
+        }
+
+        // Get netpoll descriptor with EventRead|EventEdgeTriggered.
+        desc := netpoll.Must(netpoll.Handle(conn, netpoll.EventRead | netpoll.EventEdgeTriggered))
+
+        socketConn := Conn{conn: conn, desc: desc, poller: poller}
+        
+        go httpRequestHandler(&socketConn)
     }
 }
 

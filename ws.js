@@ -4,8 +4,7 @@ function onOpen(evt) {
 }
 
 function onClose(evt) {
-	console.log("closing");
-	console.log(evt);
+	console.log("closed", evt);
 }
 
 function onMessage(evt) {
