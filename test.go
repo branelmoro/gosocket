@@ -115,5 +115,11 @@ func main() {
 		fmt.Println("OnPong----")
 	}
 
-	gosocket.StartServer()
+	conf := gosocket.NewConf()
+
+	fmt.Println("Conf is--------", conf);
+
+	server := gosocket.NewServer(conf)
+
+	server.Run();
 }

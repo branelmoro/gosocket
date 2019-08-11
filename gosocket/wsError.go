@@ -104,15 +104,23 @@ func newEmptyDataFrameError(frame *wsFrame) error {
 
 func newControlFrameFinError(frame *wsFrame) error {
 	return &wsFrameError{
-		error: fmt.Errorf("ERR_CONTROL_FRAME_FIN: Control frame should have fin bit set to 1."),
+		error: fmt.Errorf("ERR_CONTROL_FRAME_FIN: Control frame must have fin bit set to 1."),
 		frame: frame,
 		_code: ERR_CONTROL_FRAME_FIN,
 	}
 }
 
+func newControlFrameRsv1Error(frame *wsFrame) error {
+	return &wsFrameError{
+		error: fmt.Errorf("ERR_CONTROL_FRAME_RSV1: Control frame must not have rsv1 bit set to 1."),
+		frame: frame,
+		_code: ERR_CONTROL_FRAME_RSV1,
+	}
+}
+
 func newControlFrameLengthError(frame *wsFrame) error {
 	return &wsFrameError{
-		error: fmt.Errorf("ERR_CONTROL_FRAME_LENGTH: Control frame payload length should be less than or equal to 125."),
+		error: fmt.Errorf("ERR_CONTROL_FRAME_LENGTH: Control frame payload length must be less than or equal to 125."),
 		frame: frame,
 		_code: ERR_CONTROL_FRAME_LENGTH,
 	}

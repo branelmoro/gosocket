@@ -34,7 +34,7 @@ func (w *wsWriter) ping() error {
 	frame.fin = true
 	frame.data = pingBytes
 
-	err := w.sendFrame(frame)
+	err := w.sendFrameBytes(frame.toBytes())
 
 	if err == nil {
 		w.pingSent = pingBytes
@@ -52,7 +52,7 @@ func (w *wsWriter) pong() error {
 	frame.fin = true
 	frame.data = w.pingReceived
 
-	err := w.sendFrame(frame)
+	err := w.sendFrameBytes(frame.toBytes())
 
 	if err == nil {
 		w.setConnStatus(PONG_SENT)
@@ -66,6 +66,13 @@ func (w *wsWriter) pong() error {
 
 func (w *wsWriter) Close(msg CloseMsg) error {
 
+	w._frameLock.Lock()
+	defer w._frameLock.Unlock()
+
+	if w.isCloseSent() || w.isConnClosed() {
+		return nil
+	}
+
 	if msg == nil {
 		msg = NewCloseMsg(CC_NORMAL_CLOSURE, "normal close")
 	}
@@ -74,14 +81,8 @@ func (w *wsWriter) Close(msg CloseMsg) error {
 	frame.fin = true
 	frame.data = msg.Data()
 
-	w._frameLock.Lock()
-
-	if w.isCloseSent() || w.isConnClosed() {
-		return nil
-	}
-
 	// send close frame
-	err := w.sendFrameBytes(frame.toBytes())
+	err := w.sendBytes(frame.toBytes())
 
 	if err == nil {
 		// mark close frame SendText``
@@ -103,32 +104,26 @@ func (w *wsWriter) Close(msg CloseMsg) error {
 }
 
 func (w *wsWriter) Send(msg Message) error {
-	// w._msgLock.Lock()
-	// defer w._msgLock.Unlock()
 	// return w.sendData(msg.opCode(), msg.Data())
 	return nil
 }
 
 func (w *wsWriter) SendBinary(data []byte) error {
-	w._msgLock.Lock()
-	defer w._msgLock.Unlock()
 	return w.sendData(M_BIN, data)
 }
 
 func (w *wsWriter) SendText(str string) error {
-	w._msgLock.Lock()
-	defer w._msgLock.Unlock()
 	return w.sendData(M_TXT, []byte(str))
 }
 
 func (w *wsWriter) sendData(opcode byte, data []byte) error {
 	var(
 		err error
+		frames [][]byte
 	)
 	
 	frame := w.getWriteFrame(opcode)
 	if w.isPerMessageDeflateEnabled() {
-		// data = compress(data, 9)
 		data, err = w.flate.compress(data)
 		if err != nil {
 			fmt.Println("Err in data compression---", err)
@@ -140,49 +135,49 @@ func (w *wsWriter) sendData(opcode byte, data []byte) error {
 	length := len(data)
 	startIndex := 0
 	for {
-		frame.fin = length <= serverConf.wsMaxFrameSize
+		frame.fin = length <= w.server.wsMaxFrameSize
 		if frame.fin {
 			frame.data = data[startIndex:]
-			err = w.sendFrame(frame)
-			if err != nil {
-				// error in sending frame, close underlying tcp connection
-				w.closeConn()
-				return err
-			}
 			break
 		} else {
-			frame.data = data[startIndex:startIndex+serverConf.wsMaxFrameSize]
-			err = w.sendFrame(frame)
-			if err != nil {
-				// error in sending frame, close underlying tcp connection
-				w.closeConn()
-				return err
-			}
+			frame.data = data[startIndex : startIndex+w.server.wsMaxFrameSize]
 		}
+		frames = append(frames, frame.toBytes())
 		frame.rsv1 = false
-		startIndex += serverConf.wsMaxFrameSize
-		length -= serverConf.wsMaxFrameSize
+		startIndex += w.server.wsMaxFrameSize
+		length -= w.server.wsMaxFrameSize
+	}
+
+	w._msgLock.Lock()
+	defer w._msgLock.Unlock()
+	for _, frameBytes := range frames {
+		err = w.sendFrameBytes(frameBytes)
+		if err != nil {
+			// error in sending frame, close underlying tcp connection
+			w.closeConn()
+			return err
+		}
 	}
 	return err
 }
 
-func (w *wsWriter) sendFrame(frame *wFrame) error {
+func (w *wsWriter) sendFrameBytes(frameData []byte) error {
 	w._frameLock.Lock()
+	defer w._frameLock.Unlock()
 	if w.isCloseInitiated() {
 		// connection has been closed or connection close has been intiated
 		return newConnectionClosedError(w)
 	}
-	return w.sendFrameBytes(frame.toBytes())
+	return w.sendBytes(frameData)
 }
 
-func (w *wsWriter) sendFrameBytes(data []byte) error {
+func (w *wsWriter) sendBytes(data []byte) error {
 
-	fmt.Println("sending frame---", data)
+	// fmt.Println("sending frame---", data)
 
 	// mark message writing start
 	w.setConnStatus(WRITING_ON)
 	defer w.setConnStatus(WRITING_OFF)
-	defer w._frameLock.Unlock()
 	defer w.setWriteTimeOut(time.Time{})
 
 	var(
@@ -192,7 +187,7 @@ func (w *wsWriter) sendFrameBytes(data []byte) error {
 	)
 
 	sec := 10
-	minBytes := sec * serverConf.wsMinByteRatePerSec
+	minBytes := sec * w.server.wsMinByteRatePerSec
 
 	err = w.setWriteTimeOut(time.Now().Add(time.Duration(sec) * time.Second))
 
@@ -214,7 +209,7 @@ func (w *wsWriter) sendFrameBytes(data []byte) error {
 			// timeout occured
 			if cntBytes < minBytes {
 				// return error, connection accept less data (numbytes bytes data) for 10 second
-				// expecting minBytes (serverConf.wsMinByteRatePerSec per second)
+				// expecting minBytes (w.server.wsMinByteRatePerSec per second)
 				return newSlowDataWriteError(cntBytes, sec)
 			}
 			err = w.setWriteTimeOut(time.Now().Add(time.Duration(sec) * time.Second))

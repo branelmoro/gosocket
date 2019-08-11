@@ -63,7 +63,9 @@ func (r *httpRequest) ToString() string {
 
 func (r *httpRequest) isWebSocketRequest() bool {
 	return r.method == "GET" &&
+		// r.header["origin"] != "" &&
 		r.header["upgrade"] != "" &&
 		r.header["upgrade"] == "websocket" &&
+		r.header["sec-websocket-version"] == "13" &&
 		r.header["sec-websocket-key"] != ""
 }

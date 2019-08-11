@@ -32,7 +32,7 @@ func (w *httpWriter) Write(data []byte) error {
 		err error
 	)
 	sec := 10
-	minBytes := sec * serverConf.wsMinByteRatePerSec
+	minBytes := sec * w.server.wsMinByteRatePerSec
 	err = w.setWriteTimeOut(time.Now().Add(time.Duration(sec) * time.Second))
 	if err != nil {
 		return newSetWriteTimeoutError(err)
@@ -46,7 +46,7 @@ func (w *httpWriter) Write(data []byte) error {
 			// timeout occured
 			if cntBytes < minBytes {
 				// return error, connection accept less data (numbytes bytes data) for 10 second
-				// expecting minBytes (serverConf.wsMinByteRatePerSec per second)
+				// expecting minBytes (w.server.wsMinByteRatePerSec per second)
 				return newSlowDataWriteError(cntBytes, sec)
 			}
 			err = w.setWriteTimeOut(time.Now().Add(time.Duration(sec) * time.Second))

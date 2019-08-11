@@ -8,10 +8,6 @@ import (
 	"unicode/utf8"
 )
 
-func isAllowedMessageLength(length int) bool {
-	return length <= serverConf.wsMaxMessageSize
-}
-
 type wsReader struct {
 	*wsConn
 	isClosing bool
@@ -115,6 +111,7 @@ func (r *wsReader) handleError(err error) {
 			ERR_INVALID_MESSAGE_START,
 			ERR_EXPECTING_CONTINUE_FRAME,
 			ERR_CONTROL_FRAME_FIN,
+			ERR_CONTROL_FRAME_RSV1,
 			ERR_CONTROL_FRAME_LENGTH,
 			ERR_EXPECTING_MASKED_FRAME,
 			ERR_EXPECTING_UNMASKED_FRAME:
@@ -198,9 +195,9 @@ func (r *wsReader) start() {
 
 	for {
 		if r.isClosing && !isCloseTimeoutSet {
-			err = r.setReadTimeOut(time.Now().Add(serverConf.wsCloseReadTimeout * time.Second))
+			err = r.setReadTimeOut(time.Now().Add(r.server.wsCloseTimeout * time.Second))
 			if err != nil {
-				// return error, Close frame not received in serverConf.wsCloseReadTimeout time
+				// return error, Close frame not received in r.server.wsCloseTimeout time
 				r.handleError(newSetReadTimeoutError(err))
 				break
 			}
@@ -223,7 +220,7 @@ func (r *wsReader) start() {
 			r.processControl(frame.opcode(), controlPayload)
 		} else {
 			messageLength += frame.length()
-			if !isAllowedMessageLength(messageLength) {
+			if messageLength > r.server.wsMaxMessageSize {
 				// close r connection, message length more than acceptable
 				r.handleError(newTooBigMessageError(messageLength))
 				break
@@ -302,7 +299,7 @@ func (r *wsReader) readFrameHeader(isFirst bool) (*wsFrame, error) {
 		// set timeout on message read start
 		err = r.setTimeOut(time.Now().Add(1 * time.Millisecond))
 	} else {
-		err = r.setTimeOut(time.Now().Add(serverConf.wsHeaderReadTimeout * time.Second))
+		err = r.setTimeOut(time.Now().Add(r.server.wsHeaderReadTimeout * time.Second))
 	}
 	if err != nil {
 		// error in setting timeout
@@ -328,9 +325,14 @@ func (r *wsReader) readFrameHeader(isFirst bool) (*wsFrame, error) {
 			return &frame, newUnidentifiedFrameError(&frame)
 	}
 
-	if frame.isControlFrame() && !frame.fin() {
-		// control frame must be final frame with fin bit set to 1
-		return &frame, newControlFrameFinError(&frame)
+	if frame.isControlFrame() {
+		if !frame.fin() {
+			// control frame must be final frame with fin bit set to 1
+			return &frame, newControlFrameFinError(&frame)
+		}
+		if frame.rsv1() {
+			return &frame, newControlFrameRsv1Error(&frame)
+		}
 	}
 
 	if isFirst {
@@ -350,7 +352,7 @@ func (r *wsReader) readFrameHeader(isFirst bool) (*wsFrame, error) {
 	}
 
 	if isFirst {
-		err = r.setTimeOut(time.Now().Add(serverConf.wsHeaderReadTimeout * time.Second))
+		err = r.setTimeOut(time.Now().Add(r.server.wsHeaderReadTimeout * time.Second))
 		if err != nil {
 			// error in setting timeout
 			return &frame, newSetReadTimeoutError(err)
@@ -445,7 +447,7 @@ func (r *wsReader) readFrameData(frame *wsFrame) error {
 	if size > 0 {
 
 		sec := 10
-		minBytes := sec * serverConf.wsMinByteRatePerSec
+		minBytes := sec * r.server.wsMinByteRatePerSec
 
 		err = r.setTimeOut(time.Now().Add(time.Duration(sec) * time.Second))
 		if err != nil {
@@ -464,7 +466,7 @@ func (r *wsReader) readFrameData(frame *wsFrame) error {
 				// timeout occured
 				if cntBytes < minBytes {
 					// return error, connection sent less data (numbytes bytes data) for 10 second
-					// expecting minBytes (serverConf.wsMinByteRatePerSec per second)
+					// expecting minBytes (r.server.wsMinByteRatePerSec per second)
 					return newSlowDataReadError(cntBytes, sec)
 				}
 				err = r.setTimeOut(time.Now().Add(time.Duration(sec) * time.Second))

@@ -198,6 +198,10 @@ func (r *httpReader) readRequestLine() error {
 	}
 	if r.req.URL.Host != "" {
 		r.req.host = r.req.URL.Host
+		if !r.isValidHttpHost(r.req.host) {
+			// return invalid host received in http
+			return newHttpMalformedError()
+		}
 	}
 	r.req.protocol = string(r.req.bytes[protoStart:index])
 	if r.req.protocol != "HTTP/1.1" {
@@ -218,7 +222,7 @@ func (r *httpReader) readHeader() error {
 		err error
 	)
 	r.req.headerStart = len(r.req.bytes)
-	r.headerLimit = r.req.headerStart + serverConf.httpMaxHeaderSize
+	r.headerLimit = r.req.headerStart + r.server.httpMaxHeaderSize
 	field = ""
 	r.req.header = make(map[string]string)
 	for {
@@ -245,6 +249,17 @@ func (r *httpReader) readHeader() error {
 		} else {
 			if field != "" {
 				r.setHeaderField(field, valStart, valEnd)
+				if field == "host" {
+					if r.req.host == "" {
+						// return host received in both uri and http header
+						return newHttpMalformedError()
+					}
+					if !r.isValidHttpHost(r.req.header[field]) {
+						// return invalid host received in http
+						return newHttpMalformedError()
+					}
+					r.req.host = r.req.header[field]
+				}
 			}
 			fieldStart = len(r.req.bytes) - 1
 			err = r.readHeaderBytes(true)
@@ -259,17 +274,23 @@ func (r *httpReader) readHeader() error {
 	}
 	if field != "" {
 		r.setHeaderField(field, valStart, valEnd)
+		if field == "host" {
+			if r.req.host == "" {
+				// return invalid host received in both uri and http header
+				return newHttpMalformedError()
+			}
+			if !r.isValidHttpHost(r.req.header[field]) {
+				// return invalid host received in http
+				return newHttpMalformedError()
+			}
+			r.req.host = r.req.header[field]
+		}
 	}
 	r.req.headerEnd = len(r.req.bytes) - 2
 
 	if r.req.host == "" {
-		if _, isPresent := r.req.header["host"]; isPresent {
-			r.req.URL.Host = r.req.header["host"]
-			r.req.host = r.req.header["host"]
-		} else {
-			// no host found in uri or header
-			return newHttpMalformedError()
-		}
+		// no host found in uri or header
+		return newHttpMalformedError()
 	}
 
 	return err
@@ -283,6 +304,10 @@ func (r *httpReader) setHeaderField(field string, start int, end int) {
 	} else {
 		r.req.header[field] = space.ReplaceAllString(strings.TrimSpace(string(r.req.bytes[start:end])), " ")
 	}
+}
+
+func (r *httpReader) isValidHttpHost(val string) bool {
+	return val == r.server.host
 }
 
 func (r *httpReader) readHeaderBytes(isField bool) error {

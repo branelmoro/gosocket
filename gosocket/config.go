@@ -2,36 +2,45 @@ package gosocket
 
 import "time"
 
-type serverConfig struct {
-	httpReadTimeOut time.Duration
-	httpMaxUriSize int
-	httpMaxHeaderSize int
+type ServerConf struct {
+    Host string
+    BindHosts []string
+    Port uint16
 
-	wsMaxFrameSize int
-	wsMaxMessageSize int
+    HttpRquestTimeOut time.Duration
+    HttpMaxRequestLineSize uint
+    HttpMaxHeaderSize uint
 
-	wsHeaderReadTimeout time.Duration
-	wsMinByteRatePerSec int
-	wsCloseReadTimeout time.Duration
+    WsMaxFrameSize uint
+    WsMaxMessageSize uint
+
+    WsHeaderReadTimeout time.Duration
+    WsMinByteRatePerSec uint
+    WsCloseTimeout time.Duration
+
+    NetworkBandWidth uint
+    MaxWsConnection uint
 }
 
-var serverConf = serverConfig{
-	httpReadTimeOut:    20,
-    httpMaxUriSize: 	256,
-	httpMaxHeaderSize:	8192,
 
-	wsMaxFrameSize:		1024,
-	wsMaxMessageSize:	4096,
+func NewConf() (*ServerConf) {
+    return &ServerConf{
+        Host:                       "localhost",
+        BindHosts:                  []string{"127.0.0.1"},
+        Port:                       3333,
 
-	wsHeaderReadTimeout:1,
-	wsMinByteRatePerSec:100,
-	wsCloseReadTimeout: 1,
-}
+        HttpRquestTimeOut:          20,
+        HttpMaxRequestLineSize:     1024,
+        HttpMaxHeaderSize:          8192,
 
-func setConfig(config serverConfig) {
-	serverConf = config
-}
+        WsMaxFrameSize:             65536,
+        WsMaxMessageSize:           65536,
 
-func GetConfig() serverConfig {
-	return serverConf
+        WsHeaderReadTimeout:        1,
+        WsMinByteRatePerSec:        100,
+        WsCloseTimeout:             2,
+
+        NetworkBandWidth:           0,
+        MaxWsConnection:            0,
+    }
 }
