@@ -17,7 +17,7 @@ function onError(evt) {
 	console.log(evt);
 }
 
-var wsUri = "ws://127.0.0.1:3333";
+var wsUri = "wss://localhost:3333";
 ws = new WebSocket(wsUri);
 ws.onopen = function(evt) { onOpen(evt) };
 ws.onclose = function(evt) { onClose(evt) };

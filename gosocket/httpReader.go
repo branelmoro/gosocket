@@ -66,12 +66,12 @@ func (r *httpReader) isLineBreak() (bool, error) {
 			return true, nil
 		} else {
 			// invalid line break, only \r control character received
-			return false, newHttpMalformedError()
+			return false, newHttpMalformedError("invalid line break, only \r control character received")
 		}
 	}
 	if isControlChar(byteReceived) {
-		// control char received
-		return false, newHttpMalformedError()
+		// control char received in request
+		return false, newHttpMalformedError("control char received in request")
 	}
 	return false, nil
 }
@@ -104,8 +104,8 @@ func (r *httpReader) readMethod() error {
 			return err
 		}
 		if isNL {
-			// end of request line
-			return newHttpMalformedError()
+			// unexpected end of request line
+			return newHttpMalformedError("unexpected end of request line")
 		}
 		byteReceived = r.req.bytes[end]
 		if byteReceived == 0x20 {
@@ -117,11 +117,11 @@ func (r *httpReader) readMethod() error {
 		if end-start == 7 {
 			byteReceived, err = r.readByte()
 			if err != nil {
-				return newHttpMalformedError()
+				return err
 			}
 			if byteReceived != 0x20 {
 				// return invalid http request error
-				return newHttpMalformedError()
+				return newHttpMalformedError("invalid http request error")
 			}
 			break
 		}
@@ -132,7 +132,7 @@ func (r *httpReader) readMethod() error {
 			break
 		default:
 			// invalid bytes received in http request method
-			return newHttpMalformedError()
+			return newHttpMalformedError("invalid bytes received in http request method")
 	}
 	return err
 }
@@ -164,12 +164,12 @@ func (r *httpReader) readRequestLine() error {
 			// end of request line
 			if !isUriStarted {
 				// no uri found in request start line
-				return newHttpMalformedError()
+				return newHttpMalformedError("no uri found in request start line")
 			} else {
 				protoStart = index-8
 				if uriEnd >= protoStart {
 					// error in request line string
-					return newHttpMalformedError()
+					return newHttpMalformedError("error in request line string")
 				}
 			}
 			break
@@ -199,14 +199,14 @@ func (r *httpReader) readRequestLine() error {
 	if r.req.URL.Host != "" {
 		r.req.host = r.req.URL.Host
 		if !r.isValidHttpHost(r.req.host) {
-			// return invalid host received in http
-			return newHttpMalformedError()
+			// return invalid host received in http request
+			return newHttpMalformedError("invalid host received in http request")
 		}
 	}
 	r.req.protocol = string(r.req.bytes[protoStart:index])
 	if r.req.protocol != "HTTP/1.1" {
 		// return invalid http protocol error, only HTTP/1.1 allowed
-		return newHttpMalformedError()
+		return newHttpMalformedError("invalid http protocol error, only HTTP/1.1 allowed")
 	}
 	return err
 }
@@ -238,7 +238,7 @@ func (r *httpReader) readHeader() error {
 			// header line contains folded value
 			if field == "" {
 				// whitespace found at start of header field
-				return newHttpMalformedError()
+				return newHttpMalformedError("whitespace found at start of header field")
 			} else {
 				err = r.readHeaderBytes(false)
 				if err != nil {
@@ -250,13 +250,13 @@ func (r *httpReader) readHeader() error {
 			if field != "" {
 				r.setHeaderField(field, valStart, valEnd)
 				if field == "host" {
-					if r.req.host == "" {
+					if r.req.host != "" {
 						// return host received in both uri and http header
-						return newHttpMalformedError()
+						return newHttpMalformedError("host received in both uri and http header")
 					}
 					if !r.isValidHttpHost(r.req.header[field]) {
 						// return invalid host received in http
-						return newHttpMalformedError()
+						return newHttpMalformedError("invalid host received in http")
 					}
 					r.req.host = r.req.header[field]
 				}
@@ -275,13 +275,13 @@ func (r *httpReader) readHeader() error {
 	if field != "" {
 		r.setHeaderField(field, valStart, valEnd)
 		if field == "host" {
-			if r.req.host == "" {
+			if r.req.host != "" {
 				// return invalid host received in both uri and http header
-				return newHttpMalformedError()
+				return newHttpMalformedError("invalid host received in both uri and http header")
 			}
 			if !r.isValidHttpHost(r.req.header[field]) {
 				// return invalid host received in http
-				return newHttpMalformedError()
+				return newHttpMalformedError("invalid host received in http")
 			}
 			r.req.host = r.req.header[field]
 		}
@@ -290,7 +290,7 @@ func (r *httpReader) readHeader() error {
 
 	if r.req.host == "" {
 		// no host found in uri or header
-		return newHttpMalformedError()
+		return newHttpMalformedError("no host found in uri or header")
 	}
 
 	return err
@@ -307,7 +307,8 @@ func (r *httpReader) setHeaderField(field string, start int, end int) {
 }
 
 func (r *httpReader) isValidHttpHost(val string) bool {
-	return val == r.server.host
+	data := strings.SplitN(val, ":", 2);
+	return data[0] == r.server.host
 }
 
 func (r *httpReader) readHeaderBytes(isField bool) error {
@@ -326,7 +327,7 @@ func (r *httpReader) readHeaderBytes(isField bool) error {
 		if isNL {
 			if isField {
 				// line break found in header field
-				return newHttpMalformedError()
+				return newHttpMalformedError("line break found in header field")
 			} else {
 				return nil
 			}
@@ -339,7 +340,7 @@ func (r *httpReader) readHeaderBytes(isField bool) error {
 			index += 1
 			if index > r.headerLimit {
 				// header size is more than allowed size
-				return newHttpMalformedError()
+				return newHttpMalformedError("header size is more than allowed size")
 			}
 		}
 	}

@@ -7,6 +7,9 @@ type ServerConf struct {
     BindHosts []string
     Port uint16
 
+    CertPrivate []byte
+    CertPublic []byte    
+
     HttpRquestTimeOut time.Duration
     HttpMaxRequestLineSize uint
     HttpMaxHeaderSize uint

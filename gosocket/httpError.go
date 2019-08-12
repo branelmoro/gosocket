@@ -14,9 +14,10 @@ type httpError struct {
 	_code byte
 }
 
-func newHttpMalformedError() error {
+func newHttpMalformedError(str string) error {
+	fmt.Println(str)
 	return &httpError{
-		error: fmt.Errorf("ERR_HTTP_MALFORMED: Http Malformed Error."),
+		error: fmt.Errorf("ERR_HTTP_MALFORMED: Http Malformed Error..." + str),
 		_code: ERR_HTTP_MALFORMED,
 	}
 }

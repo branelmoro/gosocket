@@ -1,7 +1,9 @@
 package gosocket
 
 import (
+    "crypto/rand"
     "fmt"
+    "crypto/tls"
     "net"
     "os"
     "sync"
@@ -16,6 +18,9 @@ type server struct {
     host string
     bindHosts []string
     port int
+
+    certPrivate []byte
+    certPublic []byte
 
     isRunning bool
 
@@ -84,7 +89,26 @@ func (s *server) forever() error {
 }
 
 func (s *server) startListener() error {
-    listener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", s.host, s.port))
+    var(
+        listener net.Listener
+        err error
+    )
+
+    network := "tcp"
+    address := fmt.Sprintf("%s:%d", s.host, s.port)
+
+    if len(s.certPublic) > 0 || len(s.certPrivate) > 0 {
+        cert, err := tls.X509KeyPair(s.certPublic, s.certPrivate)
+        if err != nil {
+            return err
+        }
+        config := tls.Config{Certificates: []tls.Certificate{cert}}
+        config.Rand = rand.Reader
+        listener, err = tls.Listen(network, address, &config)
+    } else {
+        listener, err = net.Listen(network, address)
+    }
+
     if err != nil {
         return err
     }
@@ -199,6 +223,10 @@ func NewServer(conf *ServerConf) Server {
     s.host = conf.Host
     s.bindHosts = conf.BindHosts
     s.port = int(conf.Port)
+
+    s.certPrivate = conf.CertPrivate
+    s.certPublic = conf.CertPublic
+
     s.httpRquestTimeOut = conf.HttpRquestTimeOut
     s.httpMaxRequestLineSize = int(conf.HttpMaxRequestLineSize)
     s.httpMaxHeaderSize = int(conf.HttpMaxHeaderSize)

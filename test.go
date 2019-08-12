@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 	"gosocket"
+	"io/ioutil"
+	"os"
 )
 
 func main() {
@@ -10,6 +12,7 @@ func main() {
 	// 1) on malformed request
 	gosocket.OnMalformedRequest = func(req gosocket.HttpRequest) {
 		fmt.Println("OnMalformedRequest----\n", req.Raw())
+		fmt.Println("OnMalformedRequest----\n", string(req.Raw()))
 	}
 
 	// 2) on http request
@@ -40,7 +43,8 @@ func main() {
 	// 5) on message
 	gosocket.OnText = func(w gosocket.WsWriter, str string) {
 		fmt.Println("OnText----Resending---", str)
-		w.SendText(str)
+		err := w.SendText(str)
+		fmt.Println("Resending err is ----", err)
 		// if str == "binary" {
 		// 	w.SendBinary([]byte("message received:- " + str))
 		// }
@@ -48,46 +52,6 @@ func main() {
 		// 	w.Close(nil)
 		// }
 	}
-
-	/*// 5) on message
-	gosocket.OnFile = func(w gosocket.WsWriter, msg gosocket.Message) {
-		msgSize := 0
-		maxMsgSize := 10000000
-		maxFrameSize := 20000
-		for frame = msg.Frame() {
-
-			msgSize += frame.Size()
-			if msgSize > maxMsgSize {
-				// message size error
-				w.Close()
-				return
-			}
-
-			if frame.Size() > maxFrameSize {
-				// frame size error
-				w.Close()
-				return
-			}
-
-
-			frameData, err := frame.FetchData()
-			if err != nil {
-				// fetch data error
-				w.Close()
-				return
-			}
-
-			if frame.Final() {
-				break
-			}
-			err = mag.FetchNextFrame()
-			if err != nil {
-				// next frame error
-				w.Close()
-				return
-			}
-		}
-	}*/
 
 	// 5) on message
 	gosocket.OnBinary = func(w gosocket.WsWriter, data []byte) {
@@ -116,6 +80,20 @@ func main() {
 	}
 
 	conf := gosocket.NewConf()
+
+	content, err := ioutil.ReadFile("certs/server.pem")
+	if err != nil {
+		fmt.Println("Error----", err)
+		os.Exit(1)
+	}
+	conf.CertPublic = content
+
+	content, err = ioutil.ReadFile("certs/server.key")
+	if err != nil {
+		fmt.Println("Error----", err)
+		os.Exit(1)
+	}
+	conf.CertPrivate = content
 
 	fmt.Println("Conf is--------", conf);
 

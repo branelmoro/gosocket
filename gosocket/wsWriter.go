@@ -138,11 +138,12 @@ func (w *wsWriter) sendData(opcode byte, data []byte) error {
 		frame.fin = length <= w.server.wsMaxFrameSize
 		if frame.fin {
 			frame.data = data[startIndex:]
+			frames = append(frames, frame.toBytes())
 			break
 		} else {
 			frame.data = data[startIndex : startIndex+w.server.wsMaxFrameSize]
+			frames = append(frames, frame.toBytes())
 		}
-		frames = append(frames, frame.toBytes())
 		frame.rsv1 = false
 		startIndex += w.server.wsMaxFrameSize
 		length -= w.server.wsMaxFrameSize
@@ -172,8 +173,6 @@ func (w *wsWriter) sendFrameBytes(frameData []byte) error {
 }
 
 func (w *wsWriter) sendBytes(data []byte) error {
-
-	// fmt.Println("sending frame---", data)
 
 	// mark message writing start
 	w.setConnStatus(WRITING_ON)
