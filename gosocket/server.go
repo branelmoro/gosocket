@@ -5,7 +5,6 @@ import (
     "fmt"
     "crypto/tls"
     "net"
-    "os"
     "sync"
     "time"
     "github.com/mailru/easygo/netpoll"
@@ -166,6 +165,7 @@ func (s *server) disconnectAll(msg CloseMsg) {
         fmt.Println("Please wait...", s.wsCount(), " connections are still open")
         time.Sleep(200 * time.Millisecond)
     }
+    fmt.Println("All connections closed successfully")
 }
 
 func (s *server) Run() {
@@ -178,9 +178,8 @@ func (s *server) Run() {
     if err != nil {
         s.logError(err)
         fmt.Println("Error in starting listener: ", err)
-        os.Exit(1)
+        return
     }
-    defer s.listener.Close()
 
     // mark server running
     s.isRunning = true
@@ -213,11 +212,13 @@ func (s *server) Run() {
 
         go s.handleConnection(&socketConn)
     }
-    if err != nil {
-        s.logError(err)
-        fmt.Println("Error occurred on server: ", err)
-        os.Exit(1)
-    }
+
+    s.isRunning = false
+
+    // close all opened connections
+    msg := NewCloseMsg(CC_GOING_AWAY, "server shutting down")
+    s.disconnectAll(msg)
+
 }
 
 func (s *server) handleConnection(conn *Conn) {
@@ -249,9 +250,6 @@ func (s *server) Shutdown() {
         s.logError(err)
         fmt.Println("Error Server Shutdown: ", err)
     }
-    s.isRunning = false
-    msg := NewCloseMsg(CC_GOING_AWAY, "server shutting down")
-    s.disconnectAll(msg)
 }
 
 func (s *server) Restart() {

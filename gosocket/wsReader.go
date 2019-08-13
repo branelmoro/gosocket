@@ -208,7 +208,7 @@ func (r *wsReader) start() {
 			r.handleError(err)
 			break
 		}
-		fmt.Println("Frame Opcode : ", frame.opcode(), ", Frame data-----", frame.toBytes())
+		// fmt.Println("Frame Opcode : ", frame.opcode(), ", Frame data-----", frame.toBytes())
 		if frame.isControlFrame() {
 			err = r.readFrameData(frame)
 			if err != nil {

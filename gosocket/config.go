@@ -44,6 +44,6 @@ func NewConf() (*ServerConf) {
         WsCloseTimeout:             2,
 
         NetworkBandWidth:           0,
-        MaxWsConnection:            0,
+        MaxWsConnection:            1,
     }
 }
