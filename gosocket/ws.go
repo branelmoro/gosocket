@@ -56,6 +56,7 @@ func (ws *wsConn) closeConn() error {
 	fmt.Println("calling closeConn------")
 	ws._connLock.Lock()
     defer ws._connLock.Unlock()
+    defer ws.server.delConn(ws)
     if ws.isConnClosed() {
     	return nil
     }
@@ -82,6 +83,7 @@ func (ws *wsConn) setConnStatus(status byte) {
 func (ws *wsConn) handleTCPClose(err error) {
     ws._connLock.Lock()
     defer ws._connLock.Unlock()
+    defer ws.server.delConn(ws)
     if ws.isConnClosed() {
     	return
     }
@@ -161,4 +163,7 @@ func openWebSocket(ws *wsConn) {
 		//   // handle error
 		//
 	})
+
+	// add connection to server
+	ws.server.addConn(ws)
 }

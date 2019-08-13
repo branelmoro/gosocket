@@ -38,19 +38,32 @@ type server struct {
     networkBandWidth int
     maxWsConnection int
 
+    wsConn map[*wsConn]interface{}
+
     cntHttpWrite uint
     cntWsWrite uint
 
     cntHttpRead uint
     cntWsRead uint
 
-
     _rOpsLock sync.Mutex
     cntReadOps uint
-
-
     _wOpsLock sync.Mutex
     cntWriteOps uint
+}
+
+func (s *server) addConn(ws *wsConn) {
+    s.wsConn[ws] = nil
+}
+
+func (s *server) delConn(ws *wsConn) {
+    if _, ok := s.wsConn[ws]; ok {
+        delete(s.wsConn, ws)
+    }
+}
+
+func (s *server) wsCount() int {
+    return len(s.wsConn)
 }
 
 func (s *server) addReadOps() {
@@ -122,8 +135,37 @@ func (s *server) logError(err error) error {
     return err
 }
 
-func (s *server) disconnectAll() {
+func (s *server) disconnectAll(msg CloseMsg) {
+    var(
+        ws *wsConn
+    )
+    parallelClose := 1000
+    counter := 0
+    for k, _ := range s.wsConn {
+        counter++
+        if counter%parallelClose == 1 {
+            ws = k
+        } else {
+            go func(){
+                k.writer().Close(msg)
+            }()
+        }
+        if counter%parallelClose == 0 {
+            ws.writer().Close(msg)
+            ws = nil
+            fmt.Println(counter, " connection closed")
+        }
+    }
+    if ws != nil {
+        ws.writer().Close(msg)
+        ws = nil
+        fmt.Println(counter, " connection closed")
+    }
 
+    for s.wsCount() > 0 {
+        fmt.Println("Please wait...", s.wsCount(), " connections are still open")
+        time.Sleep(200 * time.Millisecond)
+    }
 }
 
 func (s *server) Run() {
@@ -144,6 +186,12 @@ func (s *server) Run() {
     s.isRunning = true
 
     for {
+        // wait if connection limit is reached
+        for s.maxWsConnection > 0 && s.wsCount() >= s.maxWsConnection {
+            fmt.Println("Max connection limit reached, waiting for one second--- limit", s.maxWsConnection)
+            time.Sleep(time.Second)
+        }
+
         // Listen for an incoming connection.
         conn, err = s.listener.Accept()
         if err != nil {
@@ -196,14 +244,14 @@ func (s *server) handleConnection(conn *Conn) {
 }
 
 func (s *server) Shutdown() {
-    s.isRunning = false
-    s.disconnectAll()
     err := s.listener.Close()
     if err != nil {
         s.logError(err)
-        fmt.Println("Error in server Shutdown: ", err)
-        // os.Exit(1)
+        fmt.Println("Error Server Shutdown: ", err)
     }
+    s.isRunning = false
+    msg := NewCloseMsg(CC_GOING_AWAY, "server shutting down")
+    s.disconnectAll(msg)
 }
 
 func (s *server) Restart() {
@@ -240,6 +288,8 @@ func NewServer(conf *ServerConf) Server {
 
     s.networkBandWidth = int(conf.NetworkBandWidth)
     s.maxWsConnection = int(conf.MaxWsConnection)
+
+    s.wsConn = make(map[*wsConn]interface{})
 
     return &s
 }

@@ -66,7 +66,6 @@ func (w *httpWriter) Write(data []byte) error {
 
 func (w *httpWriter) getSecWebSocketAccept() string {
 	str := append([]byte(w.req.header["sec-websocket-key"]), []byte("258EAFA5-E914-47DA-95CA-C5AB0DC85B11")...)
-    // s := "dGhlIHNhbXBsZSBub25jZQ==258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
     h := sha1.New()
     h.Write(str)
     bs := h.Sum(nil)
