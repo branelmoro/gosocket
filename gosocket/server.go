@@ -186,7 +186,7 @@ func (s *server) Run() {
 
     for {
         // wait if connection limit is reached
-        for s.maxWsConnection > 0 && s.wsCount() >= s.maxWsConnection {
+        for s.isRunning && s.maxWsConnection > 0 && s.wsCount() >= s.maxWsConnection {
             fmt.Println("Max connection limit reached, waiting for one second--- limit", s.maxWsConnection)
             time.Sleep(time.Second)
         }
@@ -212,8 +212,6 @@ func (s *server) Run() {
 
         go s.handleConnection(&socketConn)
     }
-
-    s.isRunning = false
 
     // close all opened connections
     msg := NewCloseMsg(CC_GOING_AWAY, "server shutting down")
@@ -250,6 +248,8 @@ func (s *server) Shutdown() {
         s.logError(err)
         fmt.Println("Error Server Shutdown: ", err)
     }
+
+    s.isRunning = false
 }
 
 func (s *server) Restart() {
