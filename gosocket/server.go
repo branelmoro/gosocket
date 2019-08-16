@@ -49,6 +49,8 @@ type server struct {
     cntReadOps uint
     _wOpsLock sync.Mutex
     cntWriteOps uint
+
+    ioSpeed int
 }
 
 func (s *server) addConn(ws *wsConn) {
@@ -90,12 +92,21 @@ func (s *server) delWriteOps() {
 }
 
 func (s *server) maxIOSpeed() int {
-    return 1000
+    return s.ioSpeed
 }
 
-func (s *server) forever() error {
+func (s *server) forever() {
+    if s.networkBandWidth <= 0 {
+        return
+    }
+    bw := s.networkBandWidth * 1024 * 1024
     for {
-
+        iOps := s.cntReadOps + s.cntWriteOps
+        if bw == 0 {
+            s.ioSpeed = bw
+        } else {
+            s.ioSpeed = bw/int(iOps)
+        }
         time.Sleep(time.Second)
     }
 }
@@ -181,6 +192,10 @@ func (s *server) Run() {
         return
     }
 
+    go s.forever()
+
+    speedControl := s.networkBandWidth <= 0
+
     // mark server running
     s.isRunning = true
 
@@ -208,7 +223,7 @@ func (s *server) Run() {
         // Get netpoll descriptor with EventRead|EventEdgeTriggered.
         desc := netpoll.Must(netpoll.Handle(conn, netpoll.EventRead | netpoll.EventEdgeTriggered))
 
-        socketConn := Conn{conn: conn, desc: desc, poller: poller, server: s}
+        socketConn := Conn{conn: conn, desc: desc, poller: poller, server: s, speedControl: speedControl}
 
         go s.handleConnection(&socketConn)
     }
