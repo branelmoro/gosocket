@@ -194,7 +194,7 @@ func (s *server) Run() {
 
     go s.forever()
 
-    speedControl := s.networkBandWidth <= 0
+    speedControl := s.networkBandWidth > 0
 
     // mark server running
     s.isRunning = true
