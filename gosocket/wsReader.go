@@ -447,7 +447,7 @@ func (r *wsReader) readFrameData(frame *wsFrame) error {
 	if size > 0 {
 
 		sec := 10
-		minBytes := sec * r.server.wsMinByteRatePerSec
+		minBytes := sec * r.server.minIOSpeed()
 
 		err = r.setTimeOut(time.Now().Add(time.Duration(sec) * time.Second))
 		if err != nil {
@@ -466,7 +466,7 @@ func (r *wsReader) readFrameData(frame *wsFrame) error {
 				// timeout occured
 				if cntBytes < minBytes {
 					// return error, connection sent less data (numbytes bytes data) for 10 second
-					// expecting minBytes (r.server.wsMinByteRatePerSec per second)
+					// expecting minBytes (r.server.minIOSpeed() per second)
 					return newSlowDataReadError(cntBytes, sec)
 				}
 				err = r.setTimeOut(time.Now().Add(time.Duration(sec) * time.Second))

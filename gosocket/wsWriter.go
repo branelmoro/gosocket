@@ -186,7 +186,7 @@ func (w *wsWriter) sendBytes(data []byte) error {
 	)
 
 	sec := 10
-	minBytes := sec * w.server.wsMinByteRatePerSec
+	minBytes := sec * w.server.minIOSpeed()
 
 	err = w.setWriteTimeOut(time.Now().Add(time.Duration(sec) * time.Second))
 
@@ -208,7 +208,7 @@ func (w *wsWriter) sendBytes(data []byte) error {
 			// timeout occured
 			if cntBytes < minBytes {
 				// return error, connection accept less data (numbytes bytes data) for 10 second
-				// expecting minBytes (w.server.wsMinByteRatePerSec per second)
+				// expecting minBytes (w.server.minIOSpeed() per second)
 				return newSlowDataWriteError(cntBytes, sec)
 			}
 			err = w.setWriteTimeOut(time.Now().Add(time.Duration(sec) * time.Second))

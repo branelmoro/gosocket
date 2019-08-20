@@ -21,7 +21,7 @@ type server struct {
     certPrivate []byte
     certPublic []byte
 
-    isRunning bool
+    isListenerOn bool
 
     httpRquestTimeOut time.Duration
     httpMaxRequestLineSize int
@@ -50,7 +50,8 @@ type server struct {
     _wOpsLock sync.Mutex
     cntWriteOps uint
 
-    ioSpeed int
+    maxByteRate int
+    minByteRate int
 }
 
 func (s *server) addConn(ws *wsConn) {
@@ -92,7 +93,11 @@ func (s *server) delWriteOps() {
 }
 
 func (s *server) maxIOSpeed() int {
-    return s.ioSpeed
+    return s.maxByteRate
+}
+
+func (s *server) minIOSpeed() int {
+    return s.minByteRate
 }
 
 func (s *server) forever() {
@@ -103,9 +108,14 @@ func (s *server) forever() {
     for {
         iOps := s.cntReadOps + s.cntWriteOps
         if bw == 0 {
-            s.ioSpeed = bw
+            s.maxByteRate = bw
         } else {
-            s.ioSpeed = bw/int(iOps)
+            s.maxByteRate = bw/int(iOps)
+        }
+        if s.wsMinByteRatePerSec < s.maxByteRate {
+            s.minByteRate = s.wsMinByteRatePerSec
+        } else {
+            s.minByteRate = s.maxByteRate
         }
         time.Sleep(time.Second)
     }
@@ -146,33 +156,30 @@ func (s *server) logError(err error) error {
 }
 
 func (s *server) disconnectAll(msg CloseMsg) {
-    var(
-        ws *wsConn
-    )
-    parallelClose := 1000
-    counter := 0
-    for k, _ := range s.wsConn {
-        counter++
-        if counter%parallelClose == 1 {
-            ws = k
-        } else {
-            go func(){
-                k.writer().Close(msg)
-            }()
+    for s.wsCount() > 0 {
+        var(
+            ws *wsConn
+        )
+        parallelClose := 1000
+        counter := 0
+        for k, _ := range s.wsConn {
+            counter++
+            if counter%parallelClose == 1 {
+                ws = k
+            } else {
+                go k.writer().Close(msg)
+            }
+            if counter%parallelClose == 0 {
+                ws.writer().Close(msg)
+                ws = nil
+                fmt.Println(counter, " connection closed")
+            }
         }
-        if counter%parallelClose == 0 {
+        if ws != nil {
             ws.writer().Close(msg)
             ws = nil
             fmt.Println(counter, " connection closed")
         }
-    }
-    if ws != nil {
-        ws.writer().Close(msg)
-        ws = nil
-        fmt.Println(counter, " connection closed")
-    }
-
-    for s.wsCount() > 0 {
         fmt.Println("Please wait...", s.wsCount(), " connections are still open")
         time.Sleep(200 * time.Millisecond)
     }
@@ -196,12 +203,12 @@ func (s *server) Run() {
 
     speedControl := s.networkBandWidth > 0
 
-    // mark server running
-    s.isRunning = true
+    // mark server listening
+    s.isListenerOn = true
 
     for {
         // wait if connection limit is reached
-        for s.isRunning && s.maxWsConnection > 0 && s.wsCount() >= s.maxWsConnection {
+        for s.isListenerOn && s.maxWsConnection > 0 && s.wsCount() >= s.maxWsConnection {
             fmt.Println("Max connection limit reached, waiting for one second--- limit", s.maxWsConnection)
             time.Sleep(time.Second)
         }
@@ -209,7 +216,9 @@ func (s *server) Run() {
         // Listen for an incoming connection.
         conn, err = s.listener.Accept()
         if err != nil {
-            s.logError(err)
+            if s.isListenerOn {
+                s.logError(err)
+            }
             break
         }
 
@@ -264,7 +273,7 @@ func (s *server) Shutdown() {
         fmt.Println("Error Server Shutdown: ", err)
     }
 
-    s.isRunning = false
+    s.isListenerOn = false
 }
 
 func (s *server) Restart() {
@@ -272,6 +281,10 @@ func (s *server) Restart() {
     s.Run()
 }
 
+func (s *server) Status() {
+
+
+}
 
 func NewServer(conf *ServerConf) Server {
 
@@ -303,6 +316,8 @@ func NewServer(conf *ServerConf) Server {
     s.maxWsConnection = int(conf.MaxWsConnection)
 
     s.wsConn = make(map[*wsConn]interface{})
+
+    s.maxByteRate = s.wsMinByteRatePerSec
 
     return &s
 }
