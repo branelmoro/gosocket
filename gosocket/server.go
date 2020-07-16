@@ -5,11 +5,10 @@ import (
     "fmt"
     "crypto/tls"
     "net"
-    "sync"
+    // "sync"
     "time"
     "github.com/mailru/easygo/netpoll"
 )
-
 
 type server struct {
     listener net.Listener
@@ -23,99 +22,38 @@ type server struct {
 
     isListenerOn bool
 
-    httpRquestTimeOut time.Duration
-    httpMaxRequestLineSize int
+    httpHeaderTimeOut time.Duration
     httpMaxHeaderSize int
 
-    wsMaxFrameSize int
-    wsMaxMessageSize int
-
-    wsHeaderReadTimeout time.Duration
-    wsMinByteRatePerSec int
-    wsCloseTimeout time.Duration
-
+    maxConnections int
     networkBandWidth int
-    maxWsConnection int
 
-    wsConn map[*wsConn]interface{}
+    minByteRatePerSec int
 
-    cntHttpWrite uint
-    cntWsWrite uint
+    wsH *wsHandler
 
-    cntHttpRead uint
-    cntWsRead uint
+    wsSH *wsServerHandler
 
-    _rOpsLock sync.Mutex
-    cntReadOps uint
-    _wOpsLock sync.Mutex
-    cntWriteOps uint
+    onMalformedRequest func(HttpRequest)
+    onHttpRequest func(HttpWriter, HttpRequest)
+    onWebsocketRequest func(HttpWriter, HttpRequest)
 
-    maxByteRate int
-    minByteRate int
 }
 
-func (s *server) addConn(ws *wsConn) {
-    s.wsConn[ws] = nil
-}
 
-func (s *server) delConn(ws *wsConn) {
-    if _, ok := s.wsConn[ws]; ok {
-        delete(s.wsConn, ws)
-    }
-}
-
-func (s *server) wsCount() int {
-    return len(s.wsConn)
-}
-
-func (s *server) addReadOps() {
-    s._rOpsLock.Lock()
-    defer s._rOpsLock.Unlock()
-    s.cntReadOps++
-}
-
-func (s *server) delReadOps() {
-    s._rOpsLock.Lock()
-    defer s._rOpsLock.Unlock()
-    s.cntReadOps--
-}
-
-func (s *server) addWriteOps() {
-    s._wOpsLock.Lock()
-    defer s._wOpsLock.Unlock()
-    s.cntWriteOps++
-}
-
-func (s *server) delWriteOps() {
-    s._wOpsLock.Lock()
-    defer s._wOpsLock.Unlock()
-    s.cntWriteOps--
-}
-
-func (s *server) maxIOSpeed() int {
-    return s.maxByteRate
-}
-
-func (s *server) minIOSpeed() int {
-    return s.minByteRate
-}
-
-func (s *server) forever() {
-    if s.networkBandWidth <= 0 {
-        return
-    }
+func (s *server) startRateLimiter() {
     bw := s.networkBandWidth * 1024 * 1024
     for {
-        iOps := s.cntReadOps + s.cntWriteOps
+        iOps := s.wsSH.cntReadOps + s.wsSH.cntWriteOps
         if bw == 0 {
-            s.maxByteRate = bw
+            s.wsH.maxByteRate = bw
         } else {
-            s.maxByteRate = bw/int(iOps)
+            s.wsH.maxByteRate = bw/int(iOps)
         }
-        if s.wsMinByteRatePerSec < s.maxByteRate {
-            s.minByteRate = s.wsMinByteRatePerSec
+        if s.minByteRatePerSec < s.wsH.maxByteRate {
+            s.wsH.minByteRate = s.minByteRatePerSec
         } else {
-            s.minByteRate = s.maxByteRate
+            s.wsH.minByteRate = s.wsH.maxByteRate
         }
         time.Sleep(time.Second)
     }
@@ -155,42 +93,10 @@ func (s *server) logError(err error) error {
     return err
 }
 
-func (s *server) disconnectAll(msg CloseMsg) {
-    for s.wsCount() > 0 {
-        var(
-            ws *wsConn
-        )
-        parallelClose := 1000
-        counter := 0
-        for k, _ := range s.wsConn {
-            counter++
-            if counter%parallelClose == 1 {
-                ws = k
-            } else {
-                go k.writer().Close(msg)
-            }
-            if counter%parallelClose == 0 {
-                ws.writer().Close(msg)
-                ws = nil
-                fmt.Println(counter, " connection closed")
-            }
-        }
-        if ws != nil {
-            ws.writer().Close(msg)
-            ws = nil
-            fmt.Println(counter, " connection closed")
-        }
-        fmt.Println("Please wait...", s.wsCount(), " connections are still open")
-        time.Sleep(200 * time.Millisecond)
-    }
-    fmt.Println("All connections closed successfully")
-}
-
 func (s *server) Run() {
     var(
         err error
         conn net.Conn
-        poller netpoll.Poller
     )
     err = s.startListener()
     if err != nil {
@@ -199,17 +105,24 @@ func (s *server) Run() {
         return
     }
 
-    go s.forever()
+    s.wsSH.poller, err = netpoll.New(nil)
+    if err != nil {
+        s.logError(err)
+        fmt.Println("Error in creating connection poller: ", err)
+        return
+    }
 
-    speedControl := s.networkBandWidth > 0
+    if s.networkBandWidth > 0 {
+        go s.startRateLimiter()
+    }
 
     // mark server listening
     s.isListenerOn = true
 
     for {
         // wait if connection limit is reached
-        for s.isListenerOn && s.maxWsConnection > 0 && s.wsCount() >= s.maxWsConnection {
-            fmt.Println("Max connection limit reached, waiting for one second--- limit", s.maxWsConnection)
+        for s.isListenerOn && s.maxConnections > 0 && s.wsSH.wsCount() >= s.maxConnections {
+            fmt.Println("Max connection limit reached, waiting for one second--- limit", s.maxConnections)
             time.Sleep(time.Second)
         }
 
@@ -222,47 +135,29 @@ func (s *server) Run() {
             break
         }
 
-        poller, err = netpoll.New(nil)
-        if err != nil {
-            s.logError(err)
-            conn.Close()
-            continue
-        }
-
-        // Get netpoll descriptor with EventRead|EventEdgeTriggered.
-        desc := netpoll.Must(netpoll.Handle(conn, netpoll.EventRead | netpoll.EventEdgeTriggered))
-
-        socketConn := Conn{conn: conn, desc: desc, poller: poller, server: s, speedControl: speedControl}
-
-        go s.handleConnection(&socketConn)
+        go s.handleConnection(conn)
     }
 
     // close all opened connections
-    msg := NewCloseMsg(CC_GOING_AWAY, "server shutting down")
-    s.disconnectAll(msg)
+    s.wsSH.shutDown()
 
 }
 
-func (s *server) handleConnection(conn *Conn) {
-    reader := &httpReader{
-        Conn: conn,
-    }
+func (s *server) handleConnection(conn net.Conn) {
+    hConn := &httpconn{conn}
+    reader := &httpRequestReader{&httpReader{ conn: hConn, maxHeaderSize: s.httpMaxHeaderSize }, s.host}
     req, err := reader.readRequest()
     if err == nil {
+        w := &httpWriter{conn:hConn, req: req, wsH: s.wsH}
         if req.isWebSocketRequest() {
-            OnWebsocketRequest(&httpWriter{Conn:conn, req: req}, req)
+            s.onWebsocketRequest(w, req)
         } else {
-            OnHttpRequest(&httpWriter{Conn:conn, req: req}, req)
-            conn.close()
+            s.onHttpRequest(w, req)
+            conn.Close()
         }
     } else {
-        validAdminRequest := false
-        if validAdminRequest {
-            // process
-        } else {
-            conn.close()
-            OnMalformedRequest(req)
-        }
+        conn.Close()
+        s.onMalformedRequest(req)
     }
 }
 
@@ -289,7 +184,7 @@ func (s *server) Status() {
 func NewServer(conf *ServerConf) Server {
 
     if conf == nil {
-        conf = NewConf()
+        conf = NewServerConf()
     }
 
     s := server{}
@@ -301,23 +196,31 @@ func NewServer(conf *ServerConf) Server {
     s.certPrivate = conf.CertPrivate
     s.certPublic = conf.CertPublic
 
-    s.httpRquestTimeOut = conf.HttpRquestTimeOut
-    s.httpMaxRequestLineSize = int(conf.HttpMaxRequestLineSize)
+    s.httpHeaderTimeOut = conf.HttpHeaderTimeOut
     s.httpMaxHeaderSize = int(conf.HttpMaxHeaderSize)
 
-    s.wsMaxFrameSize = int(conf.WsMaxFrameSize)
-    s.wsMaxMessageSize = int(conf.WsMaxMessageSize)
-
-    s.wsHeaderReadTimeout = conf.WsHeaderReadTimeout
-    s.wsMinByteRatePerSec = int(conf.WsMinByteRatePerSec)
-    s.wsCloseTimeout = conf.WsCloseTimeout
-
     s.networkBandWidth = int(conf.NetworkBandWidth)
-    s.maxWsConnection = int(conf.MaxWsConnection)
+    s.maxConnections = int(conf.MaxWsConnections)
 
-    s.wsConn = make(map[*wsConn]interface{})
+    wsConf := conf.WsConf
+    if wsConf == nil {
+        wsConf = NewWsConf()
+    }
 
-    s.maxByteRate = s.wsMinByteRatePerSec
+    s.minByteRatePerSec = int(wsConf.WsMinByteRatePerSec)
+
+    s.wsSH = &wsServerHandler{}
+    s.wsSH.isBandWidthLimitSet = s.networkBandWidth > 0
+    s.wsSH.wsConn = make(map[*wsConn]struct{})
+
+    s.wsH = &wsHandler{}
+    s.wsH.setDefault(wsConf)
+    s.wsH.isMaskRequired = true
+    s.wsH.wsSH = s.wsSH
+
+    s.onMalformedRequest = conf.OnMalformedRequest
+    s.onHttpRequest = conf.OnHttpRequest
+    s.onWebsocketRequest = conf.OnWebsocketRequest
 
     return &s
 }

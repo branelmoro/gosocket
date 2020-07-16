@@ -1,0 +1,39 @@
+
+// end of frame
+// end of message
+
+
+type frameReader interface {
+    io.Reader
+    SetReadLimit(int)
+}
+
+
+
+type frameDataReader struct {
+    conn net.Conn
+    mask []byte
+    maskOffset int8
+    size int
+}
+
+func (fr *frameDataReader) Read(p []byte) (int, error) {
+    n, e := fr.conn.Read(p)
+    if len(fr.mask) > 0 {
+        cnt := 0
+        for cnt != n {
+            p[cnt] = p[cnt]^fr.mask[cnt&0x3]
+            cnt += 1
+        }
+    }
+    return n, e
+}
+
+func (fr *frameDataReader) sendBytes(data []byte) error {
+
+}
+
+type deflateReader interface {
+    readLimiter
+    io.Closer
+}

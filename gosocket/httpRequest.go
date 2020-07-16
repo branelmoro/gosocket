@@ -6,6 +6,7 @@ type HttpRequest interface {
 	Method() string
 	Host() string
 	Uri() string
+	Url() *url.URL
 	Protocol() string
 	Header() map[string]string
 	RawHeader() []byte
@@ -19,14 +20,15 @@ type httpRequest struct {
 	host string
 	uri string
 	protocol string
-	header map[string]string
-	conn *Conn
+	headers map[string]string
+	// conn *Conn
 
+	url *url.URL
+
+	// these fields are set if response is read
 	bytes []byte
 	headerStart int
 	headerEnd int
-
-	URL *url.URL
 }
 
 func (r *httpRequest) Method() string {
@@ -41,12 +43,16 @@ func (r *httpRequest) Uri() string {
 	return r.uri
 }
 
+func (r *httpRequest) Url() *url.URL {
+	return r.url
+}
+
 func (r *httpRequest) Protocol() string {
 	return r.protocol
 }
 
 func (r *httpRequest) Header() map[string]string {
-	return r.header
+	return r.headers
 }
 
 func (r *httpRequest) RawHeader() []byte {
@@ -63,9 +69,10 @@ func (r *httpRequest) ToString() string {
 
 func (r *httpRequest) isWebSocketRequest() bool {
 	return r.method == "GET" &&
-		// r.header["origin"] != "" &&
-		r.header["upgrade"] != "" &&
-		r.header["upgrade"] == "websocket" &&
-		r.header["sec-websocket-version"] == "13" &&
-		r.header["sec-websocket-key"] != ""
+		r.protocol == "HTTP/1.1" &&
+		// r.headers["origin"] != "" &&
+		r.headers["upgrade"] != "" &&
+		r.headers["upgrade"] == "websocket" &&
+		r.headers["sec-websocket-version"] == "13" &&
+		r.headers["sec-websocket-key"] != ""
 }

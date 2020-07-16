@@ -17,10 +17,10 @@ func (r *wsReader) processData(opcode byte, data []byte) {
 	writer := r.writer()
 	switch (opcode) {
 		case M_TXT:
-			OnText(writer, string(data))
+			r.wsH().onText(writer, string(data))
 			break
 		case M_BIN:
-			OnBinary(writer, data)
+			r.wsH().onBinary(writer, data)
 			break
 	}
 }
@@ -42,32 +42,34 @@ func (r *wsReader) processControl(opcode byte, data []byte) {
 					// connection not closed yet, resend close frame
 					err := writer.Close(msg)
 					if err != nil {
-						go OnError(writer, err)
+						go r.wsH().onClose(writer, NewCloseMsg(CC_ABNORMAL_CLOSE, "Close frame not sent to client"))
+						go r.wsH().onError(writer, err)
+						return
 					}
 				}
 			}
-			go OnClose(writer, msg)
+			go r.wsH().onClose(writer, msg)
 			break
 		case M_PING:
 			// ping
 			r.pingReceived = data
 			r.setConnStatus(PING_RECEIVED)
-			go OnPing(writer)
+			go r.wsH().onPing(writer)
 			err := writer.pong()
 			if err != nil {
-				go OnError(writer, err)
+				go r.wsH().onError(writer, err)
 			}
 			break
 		case M_PONG:
 			// pong
 			if r.connStatus&PING_SENT == PING_SENT {
-				go OnPong(writer)
+				go r.wsH().onPong(writer)
 				r.setConnStatus(PONG_RECEIVED)
 				if reflect.DeepEqual(r.pingSent, data) {
 					r.pingSent = []byte{}
 				} else {
 					// invalid data received in pong
-					// OnError(writer)
+					// r.wsH().onError(writer)
 				}
 			}
 			break
@@ -84,7 +86,7 @@ func (r *wsReader) handleError(err error) {
 			if r.isClosing {
 				// close frame didn't receive
 				r.closeConn()
-				go OnError(writer, err)
+				go r.wsH().onError(writer, err)
 			} else {
 				r.setTimeOut(time.Time{})
 			}
@@ -96,13 +98,12 @@ func (r *wsReader) handleError(err error) {
 			ERR_SET_READTIMEOUT,
 			ERR_SET_WRITETIMEOUT:
 			r.closeConn()
-			go OnError(writer, err)
-			go OnClose(writer, NewCloseMsg(CC_UNEXPECTED_ERROR, ""))
+			go r.wsH().onError(writer, err)
+			go r.wsH().onClose(writer, NewCloseMsg(CC_UNEXPECTED_ERROR, ""))
 			break
 
 		case ERR_TCP_CLOSE:
-			fmt.Println("here-------------------------------")
-			r.handleTCPClose(err)
+			fmt.Println("TCP connection closed by client-------------------------------")
 			break
 
 		// ws protocol errors
@@ -118,8 +119,8 @@ func (r *wsReader) handleError(err error) {
 			// these are protocol errors
 			msg := NewCloseMsg(CC_PROTOCOL_ERROR, "")
 			writer.Close(msg)
-			go OnError(writer, err)
-			go OnClose(writer, msg)
+			go r.wsH().onError(writer, err)
+			go r.wsH().onClose(writer, msg)
 			break
 
 		case ERR_EMPTY_DATA_FRAME,
@@ -128,32 +129,32 @@ func (r *wsReader) handleError(err error) {
 			// these are protocol errors
 			msg := NewCloseMsg(CC_POLICY_VIOLATION, "")
 			writer.Close(msg)
-			go OnError(writer, err)
-			go OnClose(writer, msg)
+			go r.wsH().onError(writer, err)
+			go r.wsH().onClose(writer, msg)
 			break
 
 		case ERR_EXPECTING_CLOSE_FRAME:
 			r.closeConn()
-			go OnError(writer, err)
+			go r.wsH().onError(writer, err)
 			break
 
 		case ERR_SLOW_DATA_READ:
 			msg := NewCloseMsg(CC_POLICY_VIOLATION, "")
 			writer.Close(msg)
 			r.closeConn()
-			go OnError(writer, err)
+			go r.wsH().onError(writer, err)
 			break
 
 		case ERR_SLOW_DATA_WRITE:
 			r.closeConn()
-			go OnError(writer, err)
+			go r.wsH().onError(writer, err)
 			break
 
 		case ERR_TEXT_UTF8:
 			msg := NewCloseMsg(CC_INCONSISTANT_DATA, "")
 			writer.Close(msg)
 			r.closeConn()
-			go OnError(writer, err)
+			go r.wsH().onError(writer, err)
 			break
 
 		// ws message errors
@@ -161,7 +162,7 @@ func (r *wsReader) handleError(err error) {
 			msg := NewCloseMsg(CC_BIG_MESSAGE, "")
 			writer.Close(msg)
 			r.closeConn()
-			go OnError(writer, err)
+			go r.wsH().onError(writer, err)
 			break
 	}
 }
@@ -195,9 +196,9 @@ func (r *wsReader) start() {
 
 	for {
 		if r.isClosing && !isCloseTimeoutSet {
-			err = r.setReadTimeOut(time.Now().Add(r.server.wsCloseTimeout * time.Second))
+			err = r.setReadTimeOut(time.Now().Add(r.wsH().closeTimeout * time.Second))
 			if err != nil {
-				// return error, Close frame not received in r.server.wsCloseTimeout time
+				// return error, Close frame not received in r.wsH().closeTimeout time
 				r.handleError(newSetReadTimeoutError(err))
 				break
 			}
@@ -220,7 +221,7 @@ func (r *wsReader) start() {
 			r.processControl(frame.opcode(), controlPayload)
 		} else {
 			messageLength += frame.length()
-			if messageLength > r.server.wsMaxMessageSize {
+			if messageLength > r.wsH().maxMessageSize {
 				// close r connection, message length more than acceptable
 				r.handleError(newTooBigMessageError(messageLength))
 				break
@@ -261,7 +262,7 @@ func (r *wsReader) start() {
 			}
 		}
 		if r.isCloseReceived() {
-			// close frame already received, dont read any more messages
+			// close frame already received, dont read any more frames
 			break
 		}
 		r.isClosing = r.isCloseSent()
@@ -299,7 +300,7 @@ func (r *wsReader) readFrameHeader(isFirst bool) (*wsFrame, error) {
 		// set timeout on message read start
 		err = r.setTimeOut(time.Now().Add(1 * time.Millisecond))
 	} else {
-		err = r.setTimeOut(time.Now().Add(r.server.wsHeaderReadTimeout * time.Second))
+		err = r.setTimeOut(time.Now().Add(r.wsH().headerReadTimeout * time.Second))
 	}
 	if err != nil {
 		// error in setting timeout
@@ -352,7 +353,7 @@ func (r *wsReader) readFrameHeader(isFirst bool) (*wsFrame, error) {
 	}
 
 	if isFirst {
-		err = r.setTimeOut(time.Now().Add(r.server.wsHeaderReadTimeout * time.Second))
+		err = r.setTimeOut(time.Now().Add(r.wsH().headerReadTimeout * time.Second))
 		if err != nil {
 			// error in setting timeout
 			return &frame, newSetReadTimeoutError(err)
@@ -365,11 +366,11 @@ func (r *wsReader) readFrameHeader(isFirst bool) (*wsFrame, error) {
 	}
 	frame.secondByte = readBytes[0]
 
-	if r._isClient && !frame.isMasked() {
+	if r.wsH().isMaskRequired && !frame.isMasked() {
 		// return error, data is not masked by client
 		return &frame, newExpectingMaskedFrameError(&frame)
 	}
-	if !r._isClient && frame.isMasked() {
+	if !r.wsH().isMaskRequired && frame.isMasked() {
 		// return error, data is masked by server
 		return &frame, newExpectingUnmaskedFrameError(&frame)
 	}
@@ -447,7 +448,7 @@ func (r *wsReader) readFrameData(frame *wsFrame) error {
 	if size > 0 {
 
 		sec := 10
-		minBytes := sec * r.server.minIOSpeed()
+		minBytes := sec * r.wsH().minByteRate
 
 		err = r.setTimeOut(time.Now().Add(time.Duration(sec) * time.Second))
 		if err != nil {
@@ -466,7 +467,7 @@ func (r *wsReader) readFrameData(frame *wsFrame) error {
 				// timeout occured
 				if cntBytes < minBytes {
 					// return error, connection sent less data (numbytes bytes data) for 10 second
-					// expecting minBytes (r.server.minIOSpeed() per second)
+					// expecting minBytes (r.wsH().minByteRate per second)
 					return newSlowDataReadError(cntBytes, sec)
 				}
 				err = r.setTimeOut(time.Now().Add(time.Duration(sec) * time.Second))

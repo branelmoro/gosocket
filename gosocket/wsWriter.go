@@ -23,7 +23,7 @@ func (w *wsWriter) getWriteFrame(op byte) *wFrame {
 		rsv1: false,
 		rsv2: false,
 		rsv3: false,
-		isMasked: !w._isClient,
+		isMasked: !w.wsH().isMaskRequired,
 	}
 }
 
@@ -135,18 +135,18 @@ func (w *wsWriter) sendData(opcode byte, data []byte) error {
 	length := len(data)
 	startIndex := 0
 	for {
-		frame.fin = length <= w.server.wsMaxFrameSize
+		frame.fin = length <= w.wsH().maxFrameSize
 		if frame.fin {
 			frame.data = data[startIndex:]
 			frames = append(frames, frame.toBytes())
 			break
 		} else {
-			frame.data = data[startIndex : startIndex+w.server.wsMaxFrameSize]
+			frame.data = data[startIndex : startIndex+w.wsH().maxFrameSize]
 			frames = append(frames, frame.toBytes())
 		}
 		frame.rsv1 = false
-		startIndex += w.server.wsMaxFrameSize
-		length -= w.server.wsMaxFrameSize
+		startIndex += w.wsH().maxFrameSize
+		length -= w.wsH().maxFrameSize
 	}
 
 	w._msgLock.Lock()
@@ -186,7 +186,7 @@ func (w *wsWriter) sendBytes(data []byte) error {
 	)
 
 	sec := 10
-	minBytes := sec * w.server.minIOSpeed()
+	minBytes := sec * w.wsH().minByteRate
 
 	err = w.setWriteTimeOut(time.Now().Add(time.Duration(sec) * time.Second))
 
@@ -208,7 +208,7 @@ func (w *wsWriter) sendBytes(data []byte) error {
 			// timeout occured
 			if cntBytes < minBytes {
 				// return error, connection accept less data (numbytes bytes data) for 10 second
-				// expecting minBytes (w.server.minIOSpeed() per second)
+				// expecting minBytes (w.wsH().minByteRate per second)
 				return newSlowDataWriteError(cntBytes, sec)
 			}
 			err = w.setWriteTimeOut(time.Now().Add(time.Duration(sec) * time.Second))

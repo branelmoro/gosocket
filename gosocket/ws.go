@@ -3,6 +3,7 @@ package gosocket
 import (
 	"fmt"
 	"github.com/mailru/easygo/netpoll"
+	"io"
 	"sync"
 	"time"
 )
@@ -32,11 +33,10 @@ const(
 
 
 type wsConn struct {
-	*Conn
+	netpollConn
 	ConnData interface{}
 
 	// local vars for conn
-	_isClient bool
 	connStatus byte
 	pingSent []byte
 	pingReceived []byte
@@ -56,14 +56,16 @@ func (ws *wsConn) closeConn() error {
 	fmt.Println("calling closeConn------")
 	ws._connLock.Lock()
     defer ws._connLock.Unlock()
-    defer ws.server.delConn(ws)
+    if ws.wsH().wsSH != nil {
+    	defer ws.wsH().wsSH.delConn(ws)
+    }
     if ws.isConnClosed() {
     	return nil
     }
     err := ws.close()
-    if err != nil {
+    // if err != nil {
     	ws.connStatus |= CONN_CLOSED
-    }
+    // }
     return err
 }
 
@@ -83,16 +85,22 @@ func (ws *wsConn) setConnStatus(status byte) {
 func (ws *wsConn) handleTCPClose(err error) {
     ws._connLock.Lock()
     defer ws._connLock.Unlock()
-    defer ws.server.delConn(ws)
+    if ws.wsH().wsSH != nil {
+    	defer ws.wsH().wsSH.delConn(ws)
+    }
     if ws.isConnClosed() {
     	return
     }
+    ws.stopPoller()
     ws.connStatus |= CONN_CLOSED
     writer := ws.writer()
-    go OnError(writer, err)
-	if !ws.isCloseReceived() && !ws.isCloseSent() {
-		go OnClose(writer, NewCloseMsg(CC_ABNORMAL_CLOSE, ""))
+    if !ws.isCloseReceived() || !ws.isCloseSent() {
+    	go ws.wsH().onClose(writer, NewCloseMsg(CC_ABNORMAL_CLOSE, ""))
+	    go ws.wsH().onError(writer, err)
 	}
+	// if !ws.isCloseReceived() && !ws.isCloseSent() {
+	// 	go ws.wsH().onClose(writer, NewCloseMsg(CC_ABNORMAL_CLOSE, ""))
+	// }
 }
 
 func (ws *wsConn) isCloseSent() bool {
@@ -126,7 +134,7 @@ func (ws *wsConn) startReading() {
 	ws.reader().start()
 }
 
-func openWebSocket(ws *wsConn) {
+func openWebSocket(ws *wsConn, poller netpoll.Poller, desc *netpoll.Desc) {
 
 	// keep connection open forever
 	ws.setReadTimeOut(time.Time{})
@@ -135,35 +143,51 @@ func openWebSocket(ws *wsConn) {
 
 	go OnWebsocketOpen(writer)
 
-	// start netpoll
-	// poller := *(ws.conn.poller)
-	// desc := ws.conn.desc
-
-	ws.fpoller().Start(ws.fdesc(), func(ev netpoll.Event) {
-
-		// defer func() {
-		// 	if r := recover(); r != nil {
-		// 		fmt.Println("Recovered in f", r)
-		// 		conn.Close()
-		// 	}
-		// }()
+	err := poller.Start(desc, func(ev netpoll.Event) {
 
 		fmt.Println("----------------------------------------------------------------",ev)
 
-		ws.startReading()
-		// if ev&netpoll.EventReadHup != 0 {
-		//   // poller.Stop(desc)
-		//   conn.Close()
-		//   return
-		// }
+		switch {
+			case ev&netpoll.EventPollerClosed != 0:
+				// poller is closed assign connection to another poller
+				break
+			case ev&netpoll.EventHup != 0:
+				// connection is closed by client
+				ws.handleTCPClose(newTCPError(ERR_TCP_CLOSE, io.EOF))
+				break
+			case ev&netpoll.EventReadHup != 0:
+				// connection stopped reading and closed by client
+				ws.handleTCPClose(newTCPError(ERR_TCP_CLOSE, io.EOF))
+				break
+			case ev&netpoll.EventWriteHup != 0:
+				// connection stopped writing and closed by client
+				ws.handleTCPClose(newTCPError(ERR_TCP_CLOSE, io.EOF))
+				break
+			case ev&netpoll.EventRead != 0:
+				ws.startReading()
+				break
+			case ev&netpoll.EventWrite != 0:
+				break
+			case ev&netpoll.EventOneShot != 0:
+				break
+			case ev&netpoll.EventEdgeTriggered != 0:
+				break
+			case ev&netpoll.EventErr != 0:
+				break
+			default:
+				break
+		}
+	});
 
-		// hr, err := ioutil.ReadAll(conn)
-		// fmt.Println(hr)
-		// if err != nil {
-		//   // handle error
-		//
-	})
-
-	// add connection to server
-	ws.server.addConn(ws)
+	if err == nil {
+		// add connection to wsHandler
+		if ws.wsH().wsSH != nil {
+			ws.wsH().wsSH.addConn(ws)
+		}
+	} else {
+		// close connection
+		msg := NewCloseMsg(CC_UNEXPECTED_ERROR, "poller start failed")
+		go writer.Close(msg)
+		go ws.wsH().onError(writer, err)
+	}
 }
